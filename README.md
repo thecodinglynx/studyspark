@@ -58,8 +58,8 @@ Use your browser's device toolbar (Chrome DevTools `Ctrl+Shift+M`) to preview di
 
 Copy `.env.example` to `.env` and provide values for:
 
-- `NEON_DATABASE_URL`
-- `NEON_DIRECT_URL`
+- `DATABASE_URL` (and optionally `NEON_DATABASE_URL` for clarity)
+- `DIRECT_URL` (and optionally `NEON_DIRECT_URL`)
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 
