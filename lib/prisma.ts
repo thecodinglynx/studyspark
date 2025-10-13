@@ -9,13 +9,23 @@ declare global {
 }
 
 const connectionString =
-  process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
+  process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL ?? null;
+
+if (!connectionString) {
+  throw new Error(
+    "Database connection string is missing. Set NEON_DATABASE_URL or DATABASE_URL."
+  );
+}
+
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = connectionString;
+}
 
 const isNeon = connectionString?.includes(".neon.tech");
 
 let prismaClient: PrismaClient;
 
-if (isNeon && connectionString) {
+if (isNeon) {
   neonConfig.webSocketConstructor = ws;
   const adapter = new PrismaNeon({ connectionString });
   const options = { adapter } as unknown as Prisma.PrismaClientOptions;
