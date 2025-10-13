@@ -3,10 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 
-const subjectSchema = z.object({
+const baseSubjectSchema = z.object({
   title: z.string().min(3).max(120),
   description: z.string().max(500).optional(),
-  studyGoal: z.number().int().min(0).max(1000).default(0),
+  studyGoal: z.number().int().min(0).max(1000).default(0).optional(),
+});
+
+const flashcardSubjectSchema = baseSubjectSchema.extend({
+  type: z.literal("FLASHCARDS"),
   cards: z
     .array(
       z.object({
@@ -16,6 +20,23 @@ const subjectSchema = z.object({
     )
     .min(1),
 });
+
+const checklistSubjectSchema = baseSubjectSchema.extend({
+  type: z.literal("CHECKLIST"),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        description: z.string().max(500).optional(),
+      })
+    )
+    .min(1),
+});
+
+const subjectSchema = z.discriminatedUnion("type", [
+  flashcardSubjectSchema,
+  checklistSubjectSchema,
+]);
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -46,12 +67,25 @@ export async function GET() {
         },
       },
       _count: {
-        select: { cards: true, sessions: true },
+        select: {
+          cards: true,
+          sessions: true,
+          checklistItems: true,
+          checklistEntries: true,
+        },
       },
       sessions: {
         where: { userId: session.user.id },
         orderBy: { studiedAt: "desc" },
         take: 5,
+      },
+      checklistEntries: {
+        where: { userId: session.user.id },
+        orderBy: { practicedAt: "desc" },
+        take: 5,
+        include: {
+          item: { select: { id: true, title: true } },
+        },
       },
     },
     orderBy: { updatedAt: "desc" },
@@ -76,25 +110,43 @@ export async function POST(request: Request) {
     );
   }
 
+  const subjectData = {
+    title: parsed.data.title,
+    description: parsed.data.description,
+    studyGoal: parsed.data.studyGoal ?? 0,
+    ownerId: session.user.id,
+    type: parsed.data.type,
+  } as const;
+
   const created = await prisma.subject.create({
-    data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
-      studyGoal: parsed.data.studyGoal,
-      ownerId: session.user.id,
-      cards: {
-        createMany: {
-          data: parsed.data.cards.map(
-            ({ prompt, answer }: { prompt: string; answer: string }) => ({
-              prompt,
-              answer,
-            })
-          ),
-        },
-      },
-    },
+    data:
+      parsed.data.type === "FLASHCARDS"
+        ? {
+            ...subjectData,
+            cards: {
+              createMany: {
+                data: parsed.data.cards.map(({ prompt, answer }) => ({
+                  prompt,
+                  answer,
+                })),
+              },
+            },
+          }
+        : {
+            ...subjectData,
+            checklistItems: {
+              createMany: {
+                data: parsed.data.items.map((item, index) => ({
+                  title: item.title,
+                  description: item.description,
+                  position: index,
+                })),
+              },
+            },
+          },
     include: {
       cards: true,
+      checklistItems: true,
     },
   });
 

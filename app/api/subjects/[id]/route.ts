@@ -28,6 +28,41 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const includeConfig = {
+    cards: {
+      orderBy: { createdAt: "asc" },
+    },
+    checklistItems: {
+      orderBy: { position: "asc" },
+      include: {
+        entries: {
+          where: { userId: session.user.id },
+          orderBy: { practicedAt: "desc" },
+          take: 5,
+        },
+      },
+    },
+    owner: {
+      select: { id: true, username: true, name: true },
+    },
+    shares: {
+      include: { user: { select: { id: true, username: true, name: true } } },
+    },
+    sessions: {
+      where: { userId: session.user.id },
+      orderBy: { studiedAt: "desc" },
+      take: 20,
+    },
+    checklistEntries: {
+      where: { userId: session.user.id },
+      orderBy: { practicedAt: "desc" },
+      take: 20,
+      include: {
+        item: { select: { id: true, title: true } },
+      },
+    },
+  } as const;
+
   const subject = await prisma.subject.findFirst({
     where: {
       id: params.id,
@@ -36,22 +71,8 @@ export async function GET(
         { shares: { some: { userId: session.user.id } } },
       ],
     },
-    include: {
-      cards: {
-        orderBy: { createdAt: "asc" },
-      },
-      owner: {
-        select: { id: true, username: true, name: true },
-      },
-      shares: {
-        include: { user: { select: { id: true, username: true, name: true } } },
-      },
-      sessions: {
-        where: { userId: session.user.id },
-        orderBy: { studiedAt: "desc" },
-        take: 20,
-      },
-    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    include: includeConfig as any,
   });
 
   if (!subject) {
@@ -83,7 +104,6 @@ export async function PUT(
       { status: 400 }
     );
   }
-
   const updated = await prisma.subject.update({
     where: { id: params.id },
     data: parsed.data,

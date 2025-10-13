@@ -3,6 +3,11 @@ generator client {
   previewFeatures = ["driverAdapters"]
 }
 
+enum SubjectType {
+  FLASHCARDS
+  CHECKLIST
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -27,6 +32,7 @@ model User {
   subjects       Subject[]       @relation("SubjectOwner")
   sharedSubjects SubjectShare[]
   studySessions  StudySession[]
+  checklistEntries ChecklistEntry[]
   accounts       Account[]
   sessions       Session[]
 }
@@ -35,12 +41,15 @@ model Subject {
   id          String          @id @default(cuid())
   title       String
   description String?
+  type        SubjectType     @default(FLASHCARDS)
   ownerId     String
   studyGoal   Int             @default(0)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   owner       User            @relation("SubjectOwner", fields: [ownerId], references: [id])
   cards       Card[]
+  checklistItems ChecklistItem[]
+  checklistEntries ChecklistEntry[]
   shares      SubjectShare[]
   sessions    StudySession[]
 }
@@ -53,6 +62,34 @@ model Card {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   subject   Subject  @relation(fields: [subjectId], references: [id])
+}
+
+model ChecklistItem {
+  id          String            @id @default(cuid())
+  subjectId   String
+  title       String
+  description String?
+  position    Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  subject     Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  entries     ChecklistEntry[]
+
+  @@index([subjectId, position])
+}
+
+model ChecklistEntry {
+  id          String   @id @default(cuid())
+  subjectId   String
+  itemId      String
+  userId      String
+  practicedAt DateTime @default(now())
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  item        ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([subjectId, userId, practicedAt])
+  @@index([itemId, practicedAt])
 }
 
 model SubjectShare {

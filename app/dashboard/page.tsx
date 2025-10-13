@@ -14,6 +14,7 @@ type SubjectWithRelations = {
   ownerId: string;
   studyGoal: number;
   updatedAt: Date;
+  type: "FLASHCARDS" | "CHECKLIST";
   owner: { id: string; username: string; name: string | null };
   shares: Array<{
     id: string;
@@ -21,7 +22,12 @@ type SubjectWithRelations = {
     userId: string;
     user: { id: string; username: string; name: string | null };
   }>;
-  _count: { cards: number; shares: number; sessions: number };
+  _count: {
+    cards: number;
+    shares: number;
+    sessions: number;
+  };
+  checklistItems: Array<{ id: string; title: string }>;
   sessions: Array<{
     id: string;
     correct: number;
@@ -29,13 +35,25 @@ type SubjectWithRelations = {
     durationMin: number;
     studiedAt: Date;
   }>;
+  checklistEntries: Array<{
+    id: string;
+    practicedAt: Date;
+    item: { id: string; title: string };
+  }>;
 };
 
 type SubjectWithAnalytics = SubjectWithRelations & {
-  analytics: {
-    totalAttempts: number;
-    accuracy: number;
-  };
+  analytics:
+    | {
+        kind: "FLASHCARDS";
+        totalAttempts: number;
+        accuracy: number;
+      }
+    | {
+        kind: "CHECKLIST";
+        totalPractices: number;
+        lastPracticedAt: Date | null;
+      };
 };
 
 type DashboardTotals = {
@@ -51,26 +69,45 @@ async function getDashboardData(userId: string): Promise<{
   subjects: SubjectWithAnalytics[];
   totals: DashboardTotals;
 }> {
+  const includeConfig = {
+    owner: { select: { username: true, id: true, name: true } },
+    shares: {
+      include: {
+        user: { select: { id: true, username: true, name: true } },
+      },
+    },
+    _count: {
+      select: {
+        cards: true,
+        shares: true,
+        sessions: true,
+      },
+    },
+    sessions: {
+      where: { userId },
+      orderBy: { studiedAt: "desc" },
+      take: 5,
+    },
+    checklistItems: {
+      orderBy: { position: "asc" },
+      select: { id: true, title: true },
+    },
+    checklistEntries: {
+      where: { userId },
+      orderBy: { practicedAt: "desc" },
+      take: 5,
+      include: { item: { select: { id: true, title: true } } },
+    },
+  } as const;
+
   const subjects = (await prisma.subject.findMany({
     where: {
       OR: [{ ownerId: userId }, { shares: { some: { userId } } }],
     },
-    include: {
-      owner: { select: { username: true, id: true, name: true } },
-      shares: {
-        include: {
-          user: { select: { id: true, username: true, name: true } },
-        },
-      },
-      _count: { select: { cards: true, shares: true, sessions: true } },
-      sessions: {
-        where: { userId },
-        orderBy: { studiedAt: "desc" },
-        take: 5,
-      },
-    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    include: includeConfig as any,
     orderBy: { updatedAt: "desc" },
-  })) as SubjectWithRelations[];
+  })) as unknown as SubjectWithRelations[];
 
   const totals = await prisma.studySession.aggregate({
     where: { userId },
@@ -101,23 +138,67 @@ async function getDashboardData(userId: string): Promise<{
     progressRecords.map((item) => [item.subjectId, item])
   );
 
+  const checklistProgressRaw = await (
+    prisma as unknown as {
+      checklistEntry: {
+        groupBy: (args: unknown) => Promise<unknown>;
+      };
+    }
+  ).checklistEntry.groupBy({
+    by: ["subjectId"],
+    where: { userId },
+    _count: { _all: true },
+    _max: { practicedAt: true },
+  });
+
+  type ChecklistProgressRecord = {
+    subjectId: string;
+    _count: { _all: number };
+    _max: { practicedAt: Date | null };
+  };
+
+  const checklistRecords = checklistProgressRaw as ChecklistProgressRecord[];
+  const checklistMap = new Map(
+    checklistRecords.map((item) => [item.subjectId, item])
+  );
+
   const enrichedSubjects: SubjectWithAnalytics[] = subjects.map(
     (subject: SubjectWithRelations) => {
-      const progress = progressMap.get(subject.id);
-      const totalAttempts =
-        (progress?._sum.correct ?? 0) + (progress?._sum.incorrect ?? 0);
-      const accuracy =
-        totalAttempts === 0
-          ? 0
-          : Math.round(((progress?._sum.correct ?? 0) / totalAttempts) * 100);
+      if (subject.type === "FLASHCARDS") {
+        const progress = progressMap.get(subject.id);
+        const totalAttempts =
+          (progress?._sum.correct ?? 0) + (progress?._sum.incorrect ?? 0);
+        const accuracy =
+          totalAttempts === 0
+            ? 0
+            : Math.round(((progress?._sum.correct ?? 0) / totalAttempts) * 100);
+
+        return {
+          ...subject,
+          analytics: {
+            kind: "FLASHCARDS",
+            totalAttempts,
+            accuracy,
+          },
+        } satisfies SubjectWithAnalytics;
+      }
+
+      const checklist = checklistMap.get(subject.id);
+      const totalPractices =
+        checklist?._count._all ?? subject.checklistEntries.length;
+      const lastPracticedAt =
+        checklist?._max.practicedAt ??
+        subject.checklistEntries[0]?.practicedAt ??
+        null;
 
       return {
         ...subject,
         analytics: {
-          totalAttempts,
-          accuracy,
+          kind: "CHECKLIST",
+          totalPractices,
+          lastPracticedAt,
         },
-      } as SubjectWithAnalytics;
+      } satisfies SubjectWithAnalytics;
     }
   );
 
@@ -217,37 +298,78 @@ export default async function DashboardPage() {
                       {subject.description}
                     </p>
                   )}
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                    <span>{subject._count.cards} cards</span>
-                    <span>{subject.analytics.accuracy}% accuracy</span>
-                    <span>{subject.analytics.totalAttempts} attempts</span>
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span>
+                      {subject.type === "FLASHCARDS"
+                        ? `${subject._count.cards} cards`
+                        : `${subject.checklistItems.length} checklist items`}
+                    </span>
+                    {subject.analytics.kind === "FLASHCARDS" ? (
+                      <>
+                        <span>{subject.analytics.accuracy}% accuracy</span>
+                        <span>{subject.analytics.totalAttempts} attempts</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>
+                          {subject.analytics.totalPractices} practices
+                        </span>
+                        <span>
+                          {subject.analytics.lastPracticedAt
+                            ? `Last practiced ${subject.analytics.lastPracticedAt.toLocaleDateString()}`
+                            : "Not practiced yet"}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  {subject.sessions.length > 0 && (
-                    <div className="mt-4 space-y-2 text-xs text-slate-400">
-                      <p className="uppercase tracking-[0.3em] text-slate-500">
-                        Recent sessions
-                      </p>
-                      {subject.sessions.map((sessionItem) => (
-                        <div
-                          key={sessionItem.id}
-                          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                        >
-                          <span className="text-slate-200">
-                            {sessionItem.studiedAt.toLocaleDateString()}
-                          </span>
-                          <span className="text-right text-emerald-300 sm:text-center">
-                            +{sessionItem.correct}
-                          </span>
-                          <span className="text-right text-rose-300 sm:text-center">
-                            -{sessionItem.incorrect}
-                          </span>
-                          <span className="text-right text-slate-400">
-                            {sessionItem.durationMin} min
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {subject.type === "FLASHCARDS" &&
+                    subject.sessions.length > 0 && (
+                      <div className="mt-4 space-y-2 text-xs text-slate-400">
+                        <p className="uppercase tracking-[0.3em] text-slate-500">
+                          Recent sessions
+                        </p>
+                        {subject.sessions.map((sessionItem) => (
+                          <div
+                            key={sessionItem.id}
+                            className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                          >
+                            <span className="text-slate-200">
+                              {sessionItem.studiedAt.toLocaleDateString()}
+                            </span>
+                            <span className="text-right text-emerald-300 sm:text-center">
+                              +{sessionItem.correct}
+                            </span>
+                            <span className="text-right text-rose-300 sm:text-center">
+                              -{sessionItem.incorrect}
+                            </span>
+                            <span className="text-right text-slate-400">
+                              {sessionItem.durationMin} min
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  {subject.type === "CHECKLIST" &&
+                    subject.checklistEntries.length > 0 && (
+                      <div className="mt-4 space-y-2 text-xs text-slate-400">
+                        <p className="uppercase tracking-[0.3em] text-slate-500">
+                          Recent practice
+                        </p>
+                        {subject.checklistEntries.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="text-slate-200">
+                              {entry.item.title}
+                            </span>
+                            <span className="text-slate-400">
+                              {entry.practicedAt.toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                 </Panel>
               ))}
               {data.subjects.length === 0 && (

@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description:
     "Modern flashcard study companion with collaborative sharing and progress tracking.",
   metadataBase: new URL("https://studyspark.vercel.app"),
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
