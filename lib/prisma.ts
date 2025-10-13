@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
@@ -17,7 +17,8 @@ let prismaClient: PrismaClient;
 if (isNeon && connectionString) {
   neonConfig.webSocketConstructor = ws;
   const adapter = new PrismaNeon({ connectionString });
-  prismaClient = global.prisma ?? new PrismaClient({ adapter } as any);
+  const options = { adapter } as unknown as Prisma.PrismaClientOptions;
+  prismaClient = global.prisma ?? new PrismaClient(options);
 } else {
   prismaClient = global.prisma ?? new PrismaClient();
 }
