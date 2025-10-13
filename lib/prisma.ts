@@ -27,6 +27,7 @@ let prismaClient: PrismaClient;
 
 if (isNeon) {
   neonConfig.webSocketConstructor = ws;
+  neonConfig.poolQueryViaFetch = true;
   const adapter = new PrismaNeon({ connectionString });
   const options = { adapter } as unknown as Prisma.PrismaClientOptions;
   prismaClient = global.prisma ?? new PrismaClient(options);

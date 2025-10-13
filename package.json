@@ -22,6 +22,7 @@
     "@radix-ui/react-slot": "^1.0.2",
     "autoprefixer": "^10.4.18",
     "bcryptjs": "^2.4.3",
+    "bufferutil": "^4.0.8",
     "next": "^14.2.5",
     "next-auth": "^4.24.7",
     "postcss": "^8.4.38",
