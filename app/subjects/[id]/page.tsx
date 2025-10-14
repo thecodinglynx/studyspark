@@ -29,6 +29,7 @@ interface SubjectSessionSummary {
   correct: number;
   incorrect: number;
   durationMin: number;
+  cardCount: number;
   studiedAt: Date;
 }
 
@@ -330,25 +331,39 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
                   {subject.sessions.length === 0 && (
                     <p>No sessions yet. Start your first study run!</p>
                   )}
-                  {subject.sessions.map((sessionItem) => (
-                    <div
-                      key={sessionItem.id}
-                      className="grid grid-cols-2 items-center gap-2 rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-left sm:grid-cols-4"
-                    >
-                      <span className="text-xs font-medium text-slate-200">
-                        {sessionItem.studiedAt.toLocaleString()}
-                      </span>
-                      <span className="text-right text-emerald-300 sm:text-center">
-                        +{sessionItem.correct}
-                      </span>
-                      <span className="text-right text-rose-300 sm:text-center">
-                        -{sessionItem.incorrect}
-                      </span>
-                      <span className="text-right text-slate-300">
-                        {sessionItem.durationMin} min
-                      </span>
-                    </div>
-                  ))}
+                  {subject.sessions.map((sessionItem) => {
+                    const cardsUsed =
+                      sessionItem.cardCount && sessionItem.cardCount > 0
+                        ? sessionItem.cardCount
+                        : sessionItem.correct + sessionItem.incorrect;
+                    const totalCards =
+                      subject.cards.length > 0
+                        ? subject.cards.length
+                        : Math.max(cardsUsed, 0);
+
+                    return (
+                      <div
+                        key={sessionItem.id}
+                        className="grid grid-cols-2 items-center gap-x-4 gap-y-1 rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-left sm:grid-cols-[auto_auto_auto_auto_auto] sm:gap-x-6"
+                      >
+                        <span className="text-xs font-medium text-slate-200">
+                          {sessionItem.studiedAt.toLocaleString()}
+                        </span>
+                        <span className="whitespace-nowrap text-right text-blue-300 sm:text-center">
+                          {cardsUsed}/{totalCards} cards
+                        </span>
+                        <span className="text-right text-emerald-300 sm:text-center">
+                          +{sessionItem.correct}
+                        </span>
+                        <span className="text-right text-rose-300 sm:text-center">
+                          -{sessionItem.incorrect}
+                        </span>
+                        <span className="text-right text-slate-300">
+                          {sessionItem.durationMin} min
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (

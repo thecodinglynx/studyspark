@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -7,6 +8,7 @@ const sessionSchema = z.object({
   correct: z.number().int().min(0).max(10000),
   incorrect: z.number().int().min(0).max(10000),
   durationMin: z.number().int().min(0).max(1440),
+  cardCount: z.number().int().min(0).max(10000),
 });
 
 export async function GET(
@@ -95,15 +97,34 @@ export async function POST(
     );
   }
 
-  const created = await prisma.studySession.create({
+  const studySessionClient = prisma as unknown as {
+    studySession: {
+      create: (args: {
+        data: {
+          subjectId: string;
+          userId: string;
+          correct: number;
+          incorrect: number;
+          durationMin: number;
+          cardCount: number;
+        };
+      }) => Promise<unknown>;
+    };
+  };
+
+  const created = await studySessionClient.studySession.create({
     data: {
       subjectId: params.id,
       userId: session.user.id,
       correct: parsed.data.correct,
       incorrect: parsed.data.incorrect,
       durationMin: parsed.data.durationMin,
+      cardCount: parsed.data.cardCount,
     },
   });
+
+  revalidatePath(`/subjects/${params.id}`);
+  revalidatePath("/dashboard");
 
   return NextResponse.json(created, { status: 201 });
 }

@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { FlipCard } from "@/components/flip-card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +28,29 @@ function shuffleCards(list: StudyCard[]): StudyCard[] {
   return array;
 }
 
+function buildSession(
+  list: StudyCard[],
+  desiredCount?: number
+): { cards: StudyCard[]; size: number } {
+  if (list.length === 0) {
+    return { cards: [], size: 0 };
+  }
+
+  const normalizedBase =
+    typeof desiredCount === "number" && Number.isFinite(desiredCount)
+      ? Math.floor(desiredCount)
+      : list.length;
+
+  const normalized =
+    normalizedBase <= 0 ? list.length : Math.min(normalizedBase, list.length);
+
+  const shuffled = shuffleCards(list);
+  return {
+    cards: shuffled.slice(0, normalized),
+    size: normalized,
+  };
+}
+
 interface SubjectStudyProps {
   subjectId: string;
   cards: StudyCard[];
@@ -34,8 +65,12 @@ export function SubjectStudy({
   canEditCards = false,
 }: SubjectStudyProps) {
   const router = useRouter();
+  const initialSessionSize =
+    cards.length === 0 ? 0 : Math.min(10, cards.length);
+  const [, startRefresh] = useTransition();
+  const [sessionSize, setSessionSize] = useState<number>(initialSessionSize);
   const [orderedCards, setOrderedCards] = useState<StudyCard[]>(() =>
-    shuffleCards(cards)
+    cards.slice(0, initialSessionSize)
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -44,29 +79,108 @@ export function SubjectStudy({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date>(new Date());
+  const [sessionSaved, setSessionSaved] = useState(false);
 
   const cardsSignature = useMemo(
     () =>
       cards.map((card) => `${card.id}:${card.prompt}:${card.answer}`).join("|"),
     [cards]
   );
+  const previousSignatureRef = useRef<string | null>(null);
+
+  const resetForNewRun = useCallback(
+    (desiredCount: number = sessionSize) => {
+      const { cards: nextCards, size } = buildSession(cards, desiredCount);
+      setOrderedCards(nextCards);
+      setCurrentIndex(0);
+      setCorrectCount(0);
+      setIncorrectCount(0);
+      setCompleted(false);
+      setStartedAt(new Date());
+      setSessionSaved(false);
+      if (size !== sessionSize) {
+        setSessionSize(size);
+      }
+      return size;
+    },
+    [cards, sessionSize]
+  );
 
   useEffect(() => {
-    setOrderedCards(shuffleCards(cards));
-    setCurrentIndex(0);
-    setCorrectCount(0);
-    setIncorrectCount(0);
-    setCompleted(false);
-    setStartedAt(new Date());
-  }, [cardsSignature, cards]);
+    if (previousSignatureRef.current === cardsSignature) {
+      return;
+    }
+    previousSignatureRef.current = cardsSignature;
+
+    if (cards.length === 0) {
+      if (sessionSize !== 0) {
+        setSessionSize(0);
+        return;
+      }
+      resetForNewRun(0);
+      return;
+    }
+
+    const fallbackSize = Math.min(10, cards.length) || cards.length;
+    const normalizedSize =
+      sessionSize <= 0 ? fallbackSize : Math.min(sessionSize, cards.length);
+
+    if (normalizedSize !== sessionSize) {
+      setSessionSize(normalizedSize);
+      return;
+    }
+
+    resetForNewRun(normalizedSize);
+  }, [cardsSignature, sessionSize, cards.length, resetForNewRun]);
+
+  const hasActiveProgress =
+    !completed && (correctCount > 0 || incorrectCount > 0 || currentIndex > 0);
+
+  useEffect(() => {
+    if (completed) {
+      return;
+    }
+
+    if (cards.length === 0) {
+      resetForNewRun(0);
+      return;
+    }
+
+    if (hasActiveProgress) {
+      return;
+    }
+
+    const normalizedSize = Math.min(sessionSize, cards.length);
+
+    if (normalizedSize <= 0) {
+      const fallbackSize = Math.min(10, cards.length) || cards.length;
+      if (sessionSize !== fallbackSize) {
+        setSessionSize(fallbackSize);
+      } else {
+        resetForNewRun(fallbackSize);
+      }
+      return;
+    }
+
+    if (normalizedSize !== sessionSize) {
+      setSessionSize(normalizedSize);
+      return;
+    }
+
+    resetForNewRun(normalizedSize);
+  }, [sessionSize, hasActiveProgress, cards.length, completed, resetForNewRun]);
 
   const currentCard = orderedCards[currentIndex];
   const totalCards = orderedCards.length;
+  const cardsCompleted = correctCount + incorrectCount;
 
   const progressPercent = useMemo(() => {
     if (totalCards === 0) return 0;
-    return Math.round(((currentIndex + Number(completed)) / totalCards) * 100);
-  }, [currentIndex, totalCards, completed]);
+    const completedCount = completed
+      ? totalCards
+      : Math.min(cardsCompleted, totalCards);
+    return Math.round((completedCount / totalCards) * 100);
+  }, [cardsCompleted, completed, totalCards]);
 
   function moveToNext() {
     if (currentIndex + 1 >= totalCards) {
@@ -74,6 +188,24 @@ export function SubjectStudy({
     } else {
       setCurrentIndex((prev: number) => prev + 1);
     }
+  }
+
+  function handleSessionSizeChange(event: ChangeEvent<HTMLInputElement>) {
+    if (cards.length === 0) {
+      setSessionSize(0);
+      return;
+    }
+
+    const rawValue = event.target.valueAsNumber;
+    if (Number.isNaN(rawValue)) {
+      return;
+    }
+
+    const normalized = Math.max(
+      1,
+      Math.min(Math.floor(rawValue), cards.length)
+    );
+    setSessionSize(normalized);
   }
 
   async function recordResult(isCorrect: boolean) {
@@ -103,6 +235,7 @@ export function SubjectStudy({
           correct: correctCount,
           incorrect: incorrectCount,
           durationMin,
+          cardCount: cardsCompleted,
         }),
       });
 
@@ -111,12 +244,10 @@ export function SubjectStudy({
         throw new Error(data.error ?? "Failed to save session");
       }
 
-      router.refresh();
-      setCorrectCount(0);
-      setIncorrectCount(0);
-      setCurrentIndex(0);
-      setCompleted(false);
-      setStartedAt(new Date());
+      startRefresh(() => {
+        router.refresh();
+      });
+      setSessionSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
     } finally {
@@ -134,7 +265,12 @@ export function SubjectStudy({
           <h2 className="text-2xl font-semibold text-white">
             {completed
               ? "Session complete"
-              : `Card ${currentIndex + 1} of ${totalCards}`}
+              : totalCards === 0
+              ? "No cards available"
+              : `Card ${Math.min(
+                  currentIndex + 1,
+                  totalCards
+                )} of ${totalCards}`}
           </h2>
         </div>
         <div className="flex flex-wrap gap-2 text-sm text-slate-300 sm:gap-3">
@@ -149,6 +285,42 @@ export function SubjectStudy({
           </span>
         </div>
       </header>
+
+      <div className="rounded-3xl border border-white/5 bg-white/5 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+              Session setup
+            </p>
+            <p className="text-sm text-slate-300">
+              Practicing {totalCards} of {cards.length} cards this run.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1 text-sm text-slate-300 sm:items-end">
+            <label className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <span className="font-medium text-slate-200">Cards this run</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={cards.length === 0 ? 0 : 1}
+                max={cards.length === 0 ? 0 : cards.length}
+                step={1}
+                value={cards.length === 0 ? 0 : sessionSize}
+                onChange={handleSessionSizeChange}
+                disabled={cards.length === 0 || hasActiveProgress}
+                className="w-24 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
+            <span className="text-xs text-slate-500">
+              {cards.length === 0
+                ? "Add cards to start practicing."
+                : hasActiveProgress
+                ? "Finish this run to adjust the session size."
+                : `Up to ${cards.length} cards available.`}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {totalCards === 0 && (
         <p className="text-sm text-slate-400">
@@ -171,12 +343,21 @@ export function SubjectStudy({
         <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-6 text-emerald-200">
           <h3 className="text-lg font-semibold">Great work!</h3>
           <p className="mt-2 text-sm">
-            You finished this run with {correctCount} correct and{" "}
-            {incorrectCount} incorrect. Save the session to update your stats.
+            You completed {cardsCompleted}{" "}
+            {cardsCompleted === 1 ? "card" : "cards"} this run ({correctCount}{" "}
+            correct, {incorrectCount} incorrect). Save the session to update
+            your stats.
           </p>
-          <p className="mt-2 text-sm">
-            Study goal: {studyGoal} → progress {correctCount}/{studyGoal || "∞"}
-          </p>
+          {studyGoal > 0 && (
+            <p className="mt-2 text-sm">
+              Study goal: {studyGoal} → progress {correctCount}/{studyGoal}
+            </p>
+          )}
+          {sessionSaved && (
+            <p className="mt-3 text-sm text-emerald-100">
+              Session saved! Start a new run whenever you&apos;re ready.
+            </p>
+          )}
         </div>
       )}
 
@@ -210,8 +391,9 @@ export function SubjectStudy({
             size="lg"
             loading={saving}
             onClick={saveSession}
+            disabled={sessionSaved}
           >
-            Save session
+            {sessionSaved ? "Session saved" : "Save session"}
           </Button>
         )}
         {completed && (
@@ -220,13 +402,9 @@ export function SubjectStudy({
             size="lg"
             variant="ghost"
             onClick={() => {
-              setCompleted(false);
-              setCorrectCount(0);
-              setIncorrectCount(0);
-              setCurrentIndex(0);
-              setOrderedCards(shuffleCards(cards));
-              setStartedAt(new Date());
+              resetForNewRun();
             }}
+            disabled={saving}
           >
             Start new run
           </Button>

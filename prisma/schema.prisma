@@ -112,6 +112,7 @@ model StudySession {
   correct        Int
   incorrect      Int
   durationMin    Int
+  cardCount      Int      @default(0)
   user           User     @relation(fields: [userId], references: [id])
   subject        Subject  @relation(fields: [subjectId], references: [id])
 }

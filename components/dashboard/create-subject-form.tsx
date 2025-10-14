@@ -62,7 +62,6 @@ export function CreateSubjectForm() {
     useState<SubjectTypeOption>("FLASHCARDS");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [studyGoal, setStudyGoal] = useState(10);
   const [cards, setCards] = useState<DraftCard[]>([
     createEmptyCard(),
     createEmptyCard(),
@@ -142,7 +141,6 @@ export function CreateSubjectForm() {
     const basePayload = {
       title,
       description: description.trim() || undefined,
-      studyGoal,
     } as const;
 
     let payload:
@@ -150,14 +148,12 @@ export function CreateSubjectForm() {
           type: "FLASHCARDS";
           title: string;
           description?: string;
-          studyGoal: number;
           cards: { prompt: string; answer: string }[];
         }
       | {
           type: "CHECKLIST";
           title: string;
           description?: string;
-          studyGoal: number;
           items: { title: string; description?: string }[];
         };
 
@@ -269,22 +265,6 @@ export function CreateSubjectForm() {
           setDescription(event.target.value)
         }
       />
-      <label className="flex flex-col gap-2 text-sm text-slate-300">
-        <span className="font-medium text-slate-200">Study goal</span>
-        <input
-          type="range"
-          min={0}
-          max={200}
-          value={studyGoal}
-          onChange={(event: ChangeEvent<HTMLInputElement>) =>
-            setStudyGoal(Number(event.target.value))
-          }
-          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800"
-        />
-        <span className="text-xs text-slate-400">
-          {studyGoal} correct answers target
-        </span>
-      </label>
       <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
         <div className="flex items-start justify-between">
           <div>

@@ -33,6 +33,7 @@ type SubjectWithRelations = {
     correct: number;
     incorrect: number;
     durationMin: number;
+    cardCount: number;
     studiedAt: Date;
   }>;
   checklistEntries: Array<{
@@ -119,21 +120,30 @@ async function getDashboardData(userId: string): Promise<{
     _count: true,
   });
 
-  const progressBySubject = await prisma.studySession.groupBy({
-    by: ["subjectId"],
-    where: { userId },
-    _sum: {
-      correct: true,
-      incorrect: true,
-    },
-  });
-
   type ProgressRecord = {
     subjectId: string;
-    _sum: { correct: number | null; incorrect: number | null };
+    _sum: {
+      correct: number | null;
+      incorrect: number | null;
+      cardCount: number | null;
+    };
   };
 
-  const progressRecords = progressBySubject as ProgressRecord[];
+  const studySessionGroupByClient = prisma as unknown as {
+    studySession: {
+      groupBy: (args: {
+        by: ["subjectId"];
+        where: { userId: string };
+        _sum: { correct: true; incorrect: true; cardCount: true };
+      }) => Promise<ProgressRecord[]>;
+    };
+  };
+
+  const progressRecords = await studySessionGroupByClient.studySession.groupBy({
+    by: ["subjectId"],
+    where: { userId },
+    _sum: { correct: true, incorrect: true, cardCount: true },
+  });
   const progressMap = new Map(
     progressRecords.map((item) => [item.subjectId, item])
   );
@@ -167,6 +177,7 @@ async function getDashboardData(userId: string): Promise<{
       if (subject.type === "FLASHCARDS") {
         const progress = progressMap.get(subject.id);
         const totalAttempts =
+          progress?._sum.cardCount ??
           (progress?._sum.correct ?? 0) + (progress?._sum.incorrect ?? 0);
         const accuracy =
           totalAttempts === 0
@@ -265,12 +276,6 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-xl font-semibold text-white">Subjects</h2>
-              <Link
-                href="/subjects/new"
-                className="text-sm text-blue-400 hover:text-blue-300"
-              >
-                View sharing guide
-              </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {data.subjects.map((subject: SubjectWithAnalytics) => (
@@ -328,25 +333,39 @@ export default async function DashboardPage() {
                         <p className="uppercase tracking-[0.3em] text-slate-500">
                           Recent sessions
                         </p>
-                        {subject.sessions.map((sessionItem) => (
-                          <div
-                            key={sessionItem.id}
-                            className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                          >
-                            <span className="text-slate-200">
-                              {sessionItem.studiedAt.toLocaleDateString()}
-                            </span>
-                            <span className="text-right text-emerald-300 sm:text-center">
-                              +{sessionItem.correct}
-                            </span>
-                            <span className="text-right text-rose-300 sm:text-center">
-                              -{sessionItem.incorrect}
-                            </span>
-                            <span className="text-right text-slate-400">
-                              {sessionItem.durationMin} min
-                            </span>
-                          </div>
-                        ))}
+                        {subject.sessions.map((sessionItem) => {
+                          const cardsUsed =
+                            sessionItem.cardCount && sessionItem.cardCount > 0
+                              ? sessionItem.cardCount
+                              : sessionItem.correct + sessionItem.incorrect;
+                          const totalCardsAvailable =
+                            subject._count.cards > 0
+                              ? subject._count.cards
+                              : Math.max(cardsUsed, 0);
+
+                          return (
+                            <div
+                              key={sessionItem.id}
+                              className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-[auto_auto_auto_auto_auto] sm:gap-x-6"
+                            >
+                              <span className="text-slate-200">
+                                {sessionItem.studiedAt.toLocaleDateString()}
+                              </span>
+                              <span className="whitespace-nowrap text-right text-blue-300 sm:text-center">
+                                {cardsUsed}/{totalCardsAvailable} cards
+                              </span>
+                              <span className="text-right text-emerald-300 sm:text-center">
+                                +{sessionItem.correct}
+                              </span>
+                              <span className="text-right text-rose-300 sm:text-center">
+                                -{sessionItem.incorrect}
+                              </span>
+                              <span className="text-right text-slate-400">
+                                {sessionItem.durationMin} min
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   {subject.type === "CHECKLIST" &&
@@ -384,8 +403,7 @@ export default async function DashboardPage() {
               Create a subject
             </h2>
             <p className="mt-2 text-sm text-slate-400">
-              Define your study goal, add cards, and invite collaborators
-              instantly.
+              Add cards or checklist items and invite collaborators instantly.
             </p>
             <div className="mt-6">
               <CreateSubjectForm />
