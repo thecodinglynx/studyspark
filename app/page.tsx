@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { TopNav } from "@/components/top-nav";
+import { getCurrentSession } from "@/lib/auth";
 
 const features = [
   {
@@ -20,7 +22,13 @@ const features = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const session = await getCurrentSession();
+
+  if (session?.user?.id) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="min-h-screen">
       <TopNav />

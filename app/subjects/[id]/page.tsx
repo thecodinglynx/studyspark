@@ -6,6 +6,7 @@ import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
 import { SubjectStudy } from "@/components/subjects/subject-study";
 import { ChecklistStudy } from "@/components/subjects/checklist-study";
+import { ChecklistEditor } from "@/components/subjects/checklist-editor";
 import { CardEditor } from "@/components/subjects/card-editor";
 import { ShareManager } from "@/components/subjects/share-manager";
 
@@ -304,11 +305,28 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
                 )}
               </>
             ) : (
-              <ChecklistStudy
-                subjectId={subject.id}
-                items={checklistItems}
-                recentEntries={recentChecklistEntries}
-              />
+              <>
+                <ChecklistStudy
+                  subjectId={subject.id}
+                  items={checklistItems}
+                  recentEntries={recentChecklistEntries}
+                />
+                {canEditCards && (
+                  <div className="mt-10 border-t border-white/5 pt-8">
+                    <ChecklistEditor
+                      subjectId={subject.id}
+                      items={checklistItems.map(
+                        ({ id, title, description }) => ({
+                          id,
+                          title,
+                          description,
+                        })
+                      )}
+                      canEdit={canEditCards}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </Panel>
           <Panel className="h-fit bg-slate-900/70 p-6">
