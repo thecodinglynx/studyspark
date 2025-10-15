@@ -11,6 +11,7 @@ export function TopNav() {
   const links = [{ href: "/dashboard", label: "Dashboard" }];
 
   if (status === "authenticated") {
+    links.push({ href: "/analytics", label: "Analytics" });
     links.push({ href: "/subjects/new", label: "Create subject" });
   }
 
