@@ -4,7 +4,6 @@ import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
-import { CreateSubjectForm } from "@/components/dashboard/create-subject-form";
 
 type ShareRole = "VIEWER" | "EDITOR";
 type SubjectWithRelations = {
@@ -272,10 +271,16 @@ export default async function DashboardPage() {
           </Panel>
         </header>
 
-        <section className="grid gap-8 lg:grid-cols-[2fr,1fr]">
+        <section className="flex flex-col gap-8">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-xl font-semibold text-white">Subjects</h2>
+              <Link
+                href="/subjects/new"
+                className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-blue-300 transition hover:border-blue-300 hover:text-blue-200"
+              >
+                Create subject
+              </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {data.subjects.map((subject: SubjectWithAnalytics) => (
@@ -398,17 +403,6 @@ export default async function DashboardPage() {
               )}
             </div>
           </div>
-          <Panel className="h-fit bg-slate-900/70 p-6">
-            <h2 className="text-lg font-semibold text-white">
-              Create a subject
-            </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Add cards or checklist items and invite collaborators instantly.
-            </p>
-            <div className="mt-6">
-              <CreateSubjectForm />
-            </div>
-          </Panel>
         </section>
       </section>
     </main>

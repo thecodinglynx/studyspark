@@ -5,11 +5,14 @@ import { usePathname } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 
-const links = [{ href: "/dashboard", label: "Dashboard" }];
-
 export function TopNav() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const links = [{ href: "/dashboard", label: "Dashboard" }];
+
+  if (status === "authenticated") {
+    links.push({ href: "/subjects/new", label: "Create subject" });
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-slate-950/70 backdrop-blur-xl">

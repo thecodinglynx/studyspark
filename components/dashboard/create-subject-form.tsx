@@ -214,7 +214,7 @@ export function CreateSubjectForm() {
       setDescription("");
       setCards([createEmptyCard(), createEmptyCard()]);
       setItems([createEmptyItem(), createEmptyItem()]);
-      router.refresh();
+      router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
     } finally {
