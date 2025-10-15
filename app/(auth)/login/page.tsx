@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/forms/login-form";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
+import { getCurrentSession } from "@/lib/auth";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const session = await getCurrentSession();
+
+  if (session?.user?.id) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="min-h-screen">
       <TopNav />

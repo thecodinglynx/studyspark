@@ -33,9 +33,11 @@ export function LoginForm() {
         throw new Error(result.error);
       }
 
-      router.push("/dashboard");
+      router.replace("/dashboard");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
+    } finally {
       setLoading(false);
     }
   }
