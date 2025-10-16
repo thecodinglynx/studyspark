@@ -23,6 +23,11 @@ interface SubjectCardDetail {
   id: string;
   prompt: string;
   answer: string;
+  performances: Array<{
+    correctCount: number;
+    incorrectCount: number;
+    lastStudiedAt: Date | null;
+  }>;
 }
 
 interface SubjectSessionSummary {
@@ -73,7 +78,19 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
   }
 
   const includeConfig = {
-    cards: { orderBy: { createdAt: "asc" } },
+    cards: {
+      orderBy: { createdAt: "asc" },
+      include: {
+        performances: {
+          where: { userId: session.user.id },
+          select: {
+            correctCount: true,
+            incorrectCount: true,
+            lastStudiedAt: true,
+          },
+        },
+      },
+    },
     checklistItems: {
       orderBy: { position: "asc" },
       include: {
@@ -126,14 +143,29 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
   const canEditCards =
     subject.ownerId === session.user.id || viewerShare?.role === "EDITOR";
 
-  const cardSummaries =
+  const studyCards =
     subject.type === "FLASHCARDS"
       ? subject.cards.map((card) => ({
           id: card.id,
           prompt: card.prompt,
           answer: card.answer,
+          stats: card.performances[0]
+            ? {
+                correctCount: card.performances[0].correctCount,
+                incorrectCount: card.performances[0].incorrectCount,
+                lastStudiedAt: card.performances[0].lastStudiedAt
+                  ? card.performances[0].lastStudiedAt.toISOString()
+                  : null,
+              }
+            : undefined,
         }))
       : [];
+
+  const editorCards = studyCards.map((card) => ({
+    id: card.id,
+    prompt: card.prompt,
+    answer: card.answer,
+  }));
 
   const checklistItems =
     subject.type === "CHECKLIST"
@@ -290,7 +322,7 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
               <>
                 <SubjectStudy
                   subjectId={subject.id}
-                  cards={cardSummaries}
+                  cards={studyCards}
                   studyGoal={subject.studyGoal}
                   canEditCards={canEditCards}
                 />
@@ -298,7 +330,7 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
                   <div className="mt-10 border-t border-white/5 pt-8">
                     <CardEditor
                       subjectId={subject.id}
-                      cards={cardSummaries}
+                      cards={editorCards}
                       canEdit={canEditCards}
                     />
                   </div>

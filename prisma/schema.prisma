@@ -3,90 +3,99 @@ generator client {
   previewFeatures = ["driverAdapters"]
 }
 
-enum SubjectType {
-  FLASHCARDS
-  CHECKLIST
-}
-
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-enum ShareRole {
-  VIEWER
-  EDITOR
-}
-
 model User {
-  id             String          @id @default(cuid())
-  name           String?
-  username       String          @unique
-  email          String?         @unique
-  emailVerified  DateTime?
-  image          String?
-  passwordHash   String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  subjects       Subject[]       @relation("SubjectOwner")
-  sharedSubjects SubjectShare[]
-  studySessions  StudySession[]
+  id               String            @id @default(cuid())
+  name             String?
+  username         String            @unique
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  passwordHash     String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  accounts         Account[]
+  cardPerformances CardPerformance[]
   checklistEntries ChecklistEntry[]
-  accounts       Account[]
-  sessions       Session[]
+  sessions         Session[]
+  studySessions    StudySession[]
+  subjects         Subject[]         @relation("SubjectOwner")
+  sharedSubjects   SubjectShare[]
 }
 
 model Subject {
-  id          String          @id @default(cuid())
-  title       String
-  description String?
-  type        SubjectType     @default(FLASHCARDS)
-  ownerId     String
-  studyGoal   Int             @default(0)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  owner       User            @relation("SubjectOwner", fields: [ownerId], references: [id])
-  cards       Card[]
-  checklistItems ChecklistItem[]
+  id               String            @id @default(cuid())
+  title            String
+  description      String?
+  ownerId          String
+  studyGoal        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  type             SubjectType       @default(FLASHCARDS)
+  cards            Card[]
+  cardPerformances CardPerformance[]
   checklistEntries ChecklistEntry[]
-  shares      SubjectShare[]
-  sessions    StudySession[]
+  checklistItems   ChecklistItem[]
+  sessions         StudySession[]
+  owner            User              @relation("SubjectOwner", fields: [ownerId], references: [id])
+  shares           SubjectShare[]
 }
 
 model Card {
-  id        String   @id @default(cuid())
-  prompt    String
-  answer    String
-  subjectId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  subject   Subject  @relation(fields: [subjectId], references: [id])
+  id           String            @id @default(cuid())
+  prompt       String
+  answer       String
+  subjectId    String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  subject      Subject           @relation(fields: [subjectId], references: [id])
+  performances CardPerformance[]
+}
+
+model CardPerformance {
+  id             String    @id @default(cuid())
+  cardId         String
+  subjectId      String
+  userId         String
+  correctCount   Int       @default(0)
+  incorrectCount Int       @default(0)
+  lastStudiedAt  DateTime?
+  card           Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, userId])
+  @@index([subjectId, userId])
 }
 
 model ChecklistItem {
-  id          String            @id @default(cuid())
+  id          String           @id @default(cuid())
   subjectId   String
   title       String
   description String?
-  position    Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  subject     Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  position    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   entries     ChecklistEntry[]
+  subject     Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@index([subjectId, position])
 }
 
 model ChecklistEntry {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   subjectId   String
   itemId      String
   userId      String
-  practicedAt DateTime @default(now())
-  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  practicedAt DateTime      @default(now())
   item        ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id])
+  subject     Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id])
 
   @@index([subjectId, userId, practicedAt])
   @@index([itemId, practicedAt])
@@ -105,16 +114,16 @@ model SubjectShare {
 }
 
 model StudySession {
-  id             String   @id @default(cuid())
-  userId         String
-  subjectId      String
-  studiedAt      DateTime @default(now())
-  correct        Int
-  incorrect      Int
-  durationMin    Int
-  cardCount      Int      @default(0)
-  user           User     @relation(fields: [userId], references: [id])
-  subject        Subject  @relation(fields: [subjectId], references: [id])
+  id          String   @id @default(cuid())
+  userId      String
+  subjectId   String
+  studiedAt   DateTime @default(now())
+  correct     Int
+  incorrect   Int
+  durationMin Int
+  cardCount   Int      @default(0)
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model Account {
@@ -123,15 +132,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?        @db.Text
-  access_token      String?        @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?        @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -150,4 +158,14 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+enum SubjectType {
+  FLASHCARDS
+  CHECKLIST
+}
+
+enum ShareRole {
+  VIEWER
+  EDITOR
 }

@@ -17,15 +17,11 @@ interface StudyCard {
   id: string;
   prompt: string;
   answer: string;
-}
-
-function shuffleCards(list: StudyCard[]): StudyCard[] {
-  const array = [...list];
-  for (let index = array.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [array[index], array[swapIndex]] = [array[swapIndex], array[index]];
-  }
-  return array;
+  stats?: {
+    correctCount: number;
+    incorrectCount: number;
+    lastStudiedAt: string | null;
+  };
 }
 
 function buildSession(
@@ -44,11 +40,56 @@ function buildSession(
   const normalized =
     normalizedBase <= 0 ? list.length : Math.min(normalizedBase, list.length);
 
-  const shuffled = shuffleCards(list);
+  const weighted = selectWeightedCards(list, normalized);
   return {
-    cards: shuffled.slice(0, normalized),
+    cards: weighted,
     size: normalized,
   };
+}
+
+function selectWeightedCards(list: StudyCard[], count: number): StudyCard[] {
+  const pool = list.map((card) => ({
+    card,
+    weight: calculateCardWeight(card),
+  }));
+
+  const selected: StudyCard[] = [];
+
+  while (pool.length > 0 && selected.length < count) {
+    const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
+    if (totalWeight <= 0) {
+      selected.push(
+        ...pool.splice(0, count - selected.length).map((item) => item.card)
+      );
+      break;
+    }
+
+    let roll = Math.random() * totalWeight;
+    let chosenIndex = 0;
+
+    for (let index = 0; index < pool.length; index += 1) {
+      roll -= pool[index].weight;
+      if (roll <= 0) {
+        chosenIndex = index;
+        break;
+      }
+      if (index === pool.length - 1) {
+        chosenIndex = index;
+      }
+    }
+
+    const [picked] = pool.splice(chosenIndex, 1);
+    selected.push(picked.card);
+  }
+
+  return selected;
+}
+
+function calculateCardWeight(card: StudyCard): number {
+  const correct = card.stats?.correctCount ?? 0;
+  const incorrect = card.stats?.incorrectCount ?? 0;
+  const baseWeight = (incorrect + 1) / (correct + 1);
+  return Math.max(baseWeight, 0.1);
 }
 
 interface SubjectStudyProps {
@@ -69,8 +110,8 @@ export function SubjectStudy({
     cards.length === 0 ? 0 : Math.min(10, cards.length);
   const [, startRefresh] = useTransition();
   const [sessionSize, setSessionSize] = useState<number>(initialSessionSize);
-  const [orderedCards, setOrderedCards] = useState<StudyCard[]>(() =>
-    cards.slice(0, initialSessionSize)
+  const [orderedCards, setOrderedCards] = useState<StudyCard[]>(
+    () => buildSession(cards, initialSessionSize).cards
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -80,10 +121,23 @@ export function SubjectStudy({
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date>(new Date());
   const [sessionSaved, setSessionSaved] = useState(false);
+  const [cardTallies, setCardTallies] = useState<
+    Record<string, { correct: number; incorrect: number }>
+  >({});
 
   const cardsSignature = useMemo(
     () =>
-      cards.map((card) => `${card.id}:${card.prompt}:${card.answer}`).join("|"),
+      cards
+        .map((card) =>
+          [
+            card.id,
+            card.prompt,
+            card.answer,
+            card.stats?.correctCount ?? 0,
+            card.stats?.incorrectCount ?? 0,
+          ].join(":")
+        )
+        .join("|"),
     [cards]
   );
   const previousSignatureRef = useRef<string | null>(null);
@@ -98,6 +152,7 @@ export function SubjectStudy({
       setCompleted(false);
       setStartedAt(new Date());
       setSessionSaved(false);
+      setCardTallies({});
       if (size !== sessionSize) {
         setSessionSize(size);
       }
@@ -210,6 +265,23 @@ export function SubjectStudy({
 
   async function recordResult(isCorrect: boolean) {
     if (completed) return;
+    const cardId = currentCard?.id;
+    if (!cardId) {
+      return;
+    }
+
+    setCardTallies((previous) => {
+      const existing = previous[cardId] ?? { correct: 0, incorrect: 0 };
+      const next = {
+        correct: existing.correct + (isCorrect ? 1 : 0),
+        incorrect: existing.incorrect + (isCorrect ? 0 : 1),
+      };
+      return {
+        ...previous,
+        [cardId]: next,
+      };
+    });
+
     if (isCorrect) {
       setCorrectCount((prev: number) => prev + 1);
     } else {
@@ -236,6 +308,11 @@ export function SubjectStudy({
           incorrect: incorrectCount,
           durationMin,
           cardCount: cardsCompleted,
+          cards: Object.entries(cardTallies).map(([cardId, tallies]) => ({
+            cardId,
+            correct: tallies.correct,
+            incorrect: tallies.incorrect,
+          })),
         }),
       });
 
@@ -248,6 +325,7 @@ export function SubjectStudy({
         router.refresh();
       });
       setSessionSaved(true);
+      setCardTallies({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
     } finally {

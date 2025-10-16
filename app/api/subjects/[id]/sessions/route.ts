@@ -1,14 +1,24 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
+
 import { getCurrentSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+const cardResultSchema = z.object({
+  cardId: z.string().min(1),
+  correct: z.number().int().min(0).max(1000),
+  incorrect: z.number().int().min(0).max(1000),
+});
 
 const sessionSchema = z.object({
   correct: z.number().int().min(0).max(10000),
   incorrect: z.number().int().min(0).max(10000),
   durationMin: z.number().int().min(0).max(1440),
   cardCount: z.number().int().min(0).max(10000),
+  cards: z.array(cardResultSchema).max(2000).default([]),
 });
 
 export async function GET(
@@ -48,19 +58,13 @@ export async function GET(
     incorrect: number;
     durationMin: number;
     count: number;
-  }>(
-    (
-      acc,
-      curr: { correct: number; incorrect: number; durationMin: number }
-    ) => {
-      acc.correct += curr.correct;
-      acc.incorrect += curr.incorrect;
-      acc.durationMin += curr.durationMin;
-      acc.count += 1;
-      return acc;
-    },
-    { correct: 0, incorrect: 0, durationMin: 0, count: 0 }
-  );
+  }>((acc, curr) => {
+    acc.correct += curr.correct;
+    acc.incorrect += curr.incorrect;
+    acc.durationMin += curr.durationMin;
+    acc.count += 1;
+    return acc;
+  }, { correct: 0, incorrect: 0, durationMin: 0, count: 0 });
 
   return NextResponse.json({ sessions, totals });
 }
@@ -97,34 +101,147 @@ export async function POST(
     );
   }
 
-  const studySessionClient = prisma as unknown as {
-    studySession: {
-      create: (args: {
-        data: {
-          subjectId: string;
-          userId: string;
-          correct: number;
-          incorrect: number;
-          durationMin: number;
-          cardCount: number;
-        };
-      }) => Promise<unknown>;
-    };
+  const { cards } = parsed.data;
+
+  if (cards.length > 0) {
+    const totals = cards.reduce(
+      (acc, result) => {
+        acc.correct += result.correct;
+        acc.incorrect += result.incorrect;
+        return acc;
+      },
+      { correct: 0, incorrect: 0 }
+    );
+
+    if (
+      totals.correct !== parsed.data.correct ||
+      totals.incorrect !== parsed.data.incorrect
+    ) {
+      return NextResponse.json(
+        { error: "Mismatched card totals" },
+        { status: 400 }
+      );
+    }
+  }
+
+  const now = new Date();
+  const subjectId = params.id;
+  const userId = session.user.id;
+
+  const sessionPayload = {
+    subjectId,
+    userId,
+    correct: parsed.data.correct,
+    incorrect: parsed.data.incorrect,
+    durationMin: parsed.data.durationMin,
+    cardCount: parsed.data.cardCount,
   };
 
-  const created = await studySessionClient.studySession.create({
-    data: {
-      subjectId: params.id,
-      userId: session.user.id,
-      correct: parsed.data.correct,
-      incorrect: parsed.data.incorrect,
-      durationMin: parsed.data.durationMin,
-      cardCount: parsed.data.cardCount,
-    },
-  });
+  try {
+    const createdSession = await prisma.$transaction(async (tx) => {
+      const transactionClient = tx as Record<string, unknown>;
+      const cardPerformanceClient = transactionClient.cardPerformance as
+        | {
+            upsert: (...args: unknown[]) => Promise<unknown>;
+          }
+        | undefined;
+      const sessionRecord = await tx.studySession.create({
+        data: sessionPayload,
+      });
 
-  revalidatePath(`/subjects/${params.id}`);
-  revalidatePath("/dashboard");
+      if (cards.length > 0) {
+        const cardIds = cards.map((card) => card.cardId);
+        const validCards = await tx.card.findMany({
+          where: { id: { in: cardIds }, subjectId },
+          select: { id: true },
+        });
 
-  return NextResponse.json(created, { status: 201 });
+        if (validCards.length !== cards.length) {
+          throw new Error("Invalid card references");
+        }
+
+        if (!cardPerformanceClient) {
+          throw new Error("CardPerformance model is not available");
+        }
+
+        await Promise.all(
+          cards.map((card) =>
+            cardPerformanceClient.upsert({
+              where: {
+                cardId_userId: { cardId: card.cardId, userId },
+              },
+              update: {
+                correctCount: { increment: card.correct },
+                incorrectCount: { increment: card.incorrect },
+                lastStudiedAt: now,
+              },
+              create: {
+                cardId: card.cardId,
+                subjectId,
+                userId,
+                correctCount: card.correct,
+                incorrectCount: card.incorrect,
+                lastStudiedAt: now,
+              },
+            })
+          )
+        );
+      }
+
+      return sessionRecord;
+    });
+
+    revalidatePath(`/subjects/${subjectId}`);
+    revalidatePath("/dashboard");
+
+    return NextResponse.json(createdSession, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid card references") {
+      return NextResponse.json(
+        { error: "Invalid card references" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2021") ||
+      (error instanceof Error &&
+        error.message === "CardPerformance model is not available")
+    ) {
+      console.warn(
+        "CardPerformance table missing; recording session without per-card stats"
+      );
+
+      if (cards.length > 0) {
+        const cardIds = cards.map((card) => card.cardId);
+        const validCards = await prisma.card.findMany({
+          where: { id: { in: cardIds }, subjectId },
+          select: { id: true },
+        });
+
+        if (validCards.length !== cards.length) {
+          return NextResponse.json(
+            { error: "Invalid card references" },
+            { status: 400 }
+          );
+        }
+      }
+
+      const fallbackSession = await prisma.studySession.create({
+        data: sessionPayload,
+      });
+
+      revalidatePath(`/subjects/${subjectId}`);
+      revalidatePath("/dashboard");
+
+      return NextResponse.json(fallbackSession, { status: 201 });
+    }
+
+    console.error("Failed to record study session", error);
+    return NextResponse.json(
+      { error: "Failed to record session" },
+      { status: 500 }
+    );
+  }
 }
