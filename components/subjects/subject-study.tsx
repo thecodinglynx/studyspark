@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChangeEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -225,6 +224,49 @@ export function SubjectStudy({
     resetForNewRun(normalizedSize);
   }, [sessionSize, hasActiveProgress, cards.length, completed, resetForNewRun]);
 
+  const sessionSizeOptions = useMemo(() => {
+    const total = cards.length;
+    if (total <= 1) {
+      return [] as number[];
+    }
+
+    if (total <= 10) {
+      return Array.from({ length: total - 1 }, (_, index) => index + 1);
+    }
+
+    const preferredRatios = [0.1, 0.2, 0.3, 0.4, 0.5];
+    const baseStep = total >= 40 ? 5 : total >= 20 ? 2 : 1;
+
+    const roundToStep = (value: number) => {
+      if (baseStep <= 1) {
+        return Math.max(1, Math.round(value));
+      }
+      return Math.max(baseStep, Math.round(value / baseStep) * baseStep);
+    };
+
+    const options = preferredRatios
+      .map((ratio) => roundToStep(total * ratio))
+      .filter((count) => count > 0 && count < total);
+
+    if (options.length === 0) {
+      const fallback = Math.min(total - 1, Math.max(1, Math.round(total / 2)));
+      return [fallback];
+    }
+
+    const unique = Array.from(new Set(options)).sort((a, b) => a - b);
+    return unique;
+  }, [cards.length]);
+
+  const handleSessionSizeSelect = useCallback(
+    (nextSize: number) => {
+      if (cards.length === 0 || hasActiveProgress) {
+        return;
+      }
+      resetForNewRun(nextSize);
+    },
+    [cards.length, hasActiveProgress, resetForNewRun]
+  );
+
   const currentCard = orderedCards[currentIndex];
   const totalCards = orderedCards.length;
   const cardsCompleted = correctCount + incorrectCount;
@@ -243,24 +285,6 @@ export function SubjectStudy({
     } else {
       setCurrentIndex((prev: number) => prev + 1);
     }
-  }
-
-  function handleSessionSizeChange(event: ChangeEvent<HTMLInputElement>) {
-    if (cards.length === 0) {
-      setSessionSize(0);
-      return;
-    }
-
-    const rawValue = event.target.valueAsNumber;
-    if (Number.isNaN(rawValue)) {
-      return;
-    }
-
-    const normalized = Math.max(
-      1,
-      Math.min(Math.floor(rawValue), cards.length)
-    );
-    setSessionSize(normalized);
   }
 
   async function recordResult(isCorrect: boolean) {
@@ -374,28 +398,58 @@ export function SubjectStudy({
               Practicing {totalCards} of {cards.length} cards this run.
             </p>
           </div>
-          <div className="flex flex-col gap-1 text-sm text-slate-300 sm:items-end">
-            <label className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <span className="font-medium text-slate-200">Cards this run</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={cards.length === 0 ? 0 : 1}
-                max={cards.length === 0 ? 0 : cards.length}
-                step={1}
-                value={cards.length === 0 ? 0 : sessionSize}
-                onChange={handleSessionSizeChange}
-                disabled={cards.length === 0 || hasActiveProgress}
-                className="w-24 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
-              />
-            </label>
-            <span className="text-xs text-slate-500">
-              {cards.length === 0
-                ? "Add cards to start practicing."
-                : hasActiveProgress
-                ? "Finish this run to adjust the session size."
-                : `Up to ${cards.length} cards available.`}
-            </span>
+          <div className="flex flex-col gap-2 text-sm text-slate-300 sm:items-end">
+            <span className="font-medium text-slate-200">Cards this run</span>
+            {cards.length > 1 && sessionSizeOptions.length > 0 && (
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                {sessionSizeOptions.map((option) => {
+                  const isSelected = sessionSize === option;
+                  return (
+                    <Button
+                      key={`session-size-${option}`}
+                      type="button"
+                      size="sm"
+                      variant={isSelected ? "primary" : "secondary"}
+                      aria-pressed={isSelected}
+                      onClick={() => handleSessionSizeSelect(option)}
+                      disabled={cards.length === 0 || hasActiveProgress}
+                    >
+                      {option}
+                    </Button>
+                  );
+                })}
+                <Button
+                  key="session-size-all"
+                  type="button"
+                  size="sm"
+                  variant={
+                    sessionSize === cards.length ? "primary" : "secondary"
+                  }
+                  aria-pressed={sessionSize === cards.length}
+                  onClick={() => handleSessionSizeSelect(cards.length)}
+                  disabled={cards.length === 0 || hasActiveProgress}
+                >
+                  All ({cards.length})
+                </Button>
+              </div>
+            )}
+            {cards.length === 1 && (
+              <span className="text-xs text-slate-500">
+                Only one card available. We&apos;ll include it every run.
+              </span>
+            )}
+            {cards.length === 0 && (
+              <span className="text-xs text-slate-500">
+                Add cards to start practicing.
+              </span>
+            )}
+            {cards.length > 1 && (
+              <span className="text-xs text-slate-500">
+                {hasActiveProgress
+                  ? "Finish this run to adjust the session size."
+                  : "Choose a preset or pick All to study the whole subject."}
+              </span>
+            )}
           </div>
         </div>
       </div>
