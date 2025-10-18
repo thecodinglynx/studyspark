@@ -25,6 +25,16 @@ type StudySessionRecord = {
   incorrect: number;
 };
 
+type CardPerformanceDetail = {
+  correctCount: number;
+  incorrectCount: number;
+  card: {
+    id: string;
+    prompt: string;
+    answer: string;
+  } | null;
+};
+
 type SubjectAnalyticsRecord = {
   id: string;
   title: string;
@@ -38,6 +48,7 @@ type SubjectAnalyticsRecord = {
   sessions: StudySessionRecord[];
   checklistEntries: ChecklistEntryRecord[];
   checklistItems: ChecklistItemRecord[];
+  cardPerformances: CardPerformanceDetail[];
 };
 
 const MONTH_WINDOW = 12;
@@ -118,19 +129,28 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
           },
         },
       },
+      cardPerformances: {
+        where: { userId },
+        include: {
+          card: {
+            select: {
+              id: true,
+              prompt: true,
+              answer: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
-  })) as SubjectAnalyticsRecord[];
+  })) as unknown as SubjectAnalyticsRecord[];
 
   const monthBuckets = buildMonthBuckets();
 
   const pieSlices = subjects.map((subject) => {
     if (subject.type === "FLASHCARDS") {
-      const attempts = subject.sessions.reduce((total, session) => {
-        return total + session.correct + session.incorrect;
-      }, 0);
-
-      return { label: subject.title, value: attempts };
+      const sessionCount = subject.sessions.length;
+      return { label: subject.title, value: sessionCount };
     }
 
     const completions = subject.checklistEntries.length;
@@ -149,7 +169,7 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
       );
 
       if (monthIndex >= 0) {
-        monthlyCounts[monthIndex] += session.correct + session.incorrect;
+        monthlyCounts[monthIndex] += 1;
       }
     });
 
@@ -195,6 +215,29 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
       };
     });
 
+  const flashcardFailureHighlights = subjects
+    .filter((subject) => subject.type === "FLASHCARDS")
+    .map((subject) => {
+      const rankedCards = subject.cardPerformances
+        .filter((performance) => performance.card !== null)
+        .map((performance) => ({
+          id: performance.card!.id,
+          prompt: performance.card!.prompt,
+          answer: performance.card!.answer,
+          incorrect: performance.incorrectCount,
+          correct: performance.correctCount,
+        }))
+        .filter((card) => card.incorrect > 0)
+        .sort((a, b) => b.incorrect - a.incorrect)
+        .slice(0, 20);
+
+      return {
+        subjectTitle: subject.title,
+        cards: rankedCards,
+      };
+    })
+    .filter((entry) => entry.cards.length > 0);
+
   const hasPieData = pieSlices.some((slice) => slice.value > 0);
 
   return (
@@ -219,7 +262,8 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
         <Panel className="bg-slate-900/70 p-6">
           <h2 className="text-lg font-semibold text-white">Practice mix</h2>
           <p className="mt-2 text-sm text-slate-400">
-            Breakdown of your total study activity by subject.
+            Breakdown of completed practice sessions (and checklist runs) by
+            subject.
           </p>
           {hasPieData ? (
             <div className="mt-6">
@@ -236,7 +280,7 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
         <Panel className="bg-slate-900/70 p-6">
           <h2 className="text-lg font-semibold text-white">Monthly practice</h2>
           <p className="mt-2 text-sm text-slate-400">
-            Attempts and checklist completions across the last 12 months.
+            Sessions and checklist completions across the last 12 months.
           </p>
           {hasHistogramData ? (
             <div className="mt-6">
@@ -252,6 +296,60 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
             </p>
           )}
         </Panel>
+
+        {flashcardFailureHighlights.length > 0 && (
+          <Panel className="bg-slate-900/70 p-6">
+            <h2 className="text-lg font-semibold text-white">
+              Most missed flashcards
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Top 20 incorrect cards per subject so you can focus future review
+              sessions.
+            </p>
+            <div className="mt-6 space-y-6">
+              {flashcardFailureHighlights.map((highlight) => (
+                <div key={highlight.subjectTitle} className="space-y-4">
+                  <h3 className="text-base font-semibold text-white">
+                    {highlight.subjectTitle}
+                  </h3>
+                  <ol className="space-y-4">
+                    {highlight.cards.map((card) => (
+                      <li
+                        key={card.id}
+                        className="rounded-2xl border border-white/5 bg-white/5 p-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-200">
+                              Missed {card.incorrect}
+                            </span>
+                            {card.correct > 0 && (
+                              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-200">
+                                Correct {card.correct}
+                              </span>
+                            )}
+                          </div>
+                          <span className="min-w-[10rem] flex-1 whitespace-pre-wrap font-medium text-white">
+                            {card.prompt}
+                          </span>
+                          <span
+                            className="hidden text-slate-400 sm:inline"
+                            aria-hidden="true"
+                          >
+                            →
+                          </span>
+                          <span className="min-w-[10rem] flex-1 whitespace-pre-wrap text-slate-200">
+                            {card.answer}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
 
         {checklistHighlights.length > 0 && (
           <Panel className="bg-slate-900/70 p-6">
