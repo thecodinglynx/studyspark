@@ -109,10 +109,9 @@ export function SubjectStudy({
     cards.length === 0 ? 0 : Math.min(10, cards.length);
   const [, startRefresh] = useTransition();
   const [sessionSize, setSessionSize] = useState<number>(initialSessionSize);
-  const [orderedCards, setOrderedCards] = useState<StudyCard[]>(
+  const [sessionQueue, setSessionQueue] = useState<StudyCard[]>(
     () => buildSession(cards, initialSessionSize).cards
   );
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
   const [completed, setCompleted] = useState(false);
@@ -120,6 +119,7 @@ export function SubjectStudy({
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date>(new Date());
   const [sessionSaved, setSessionSaved] = useState(false);
+  const [repeatIncorrect, setRepeatIncorrect] = useState(false);
   const [cardTallies, setCardTallies] = useState<
     Record<string, { correct: number; incorrect: number }>
   >({});
@@ -144,17 +144,14 @@ export function SubjectStudy({
   const resetForNewRun = useCallback(
     (desiredCount: number = sessionSize) => {
       const { cards: nextCards, size } = buildSession(cards, desiredCount);
-      setOrderedCards(nextCards);
-      setCurrentIndex(0);
+      setSessionQueue(nextCards);
+      setSessionSize(size);
       setCorrectCount(0);
       setIncorrectCount(0);
       setCompleted(false);
       setStartedAt(new Date());
       setSessionSaved(false);
       setCardTallies({});
-      if (size !== sessionSize) {
-        setSessionSize(size);
-      }
       return size;
     },
     [cards, sessionSize]
@@ -188,7 +185,7 @@ export function SubjectStudy({
   }, [cardsSignature, sessionSize, cards.length, resetForNewRun]);
 
   const hasActiveProgress =
-    !completed && (correctCount > 0 || incorrectCount > 0 || currentIndex > 0);
+    !completed && (correctCount > 0 || incorrectCount > 0);
 
   useEffect(() => {
     if (completed) {
@@ -267,25 +264,20 @@ export function SubjectStudy({
     [cards.length, hasActiveProgress, resetForNewRun]
   );
 
-  const currentCard = orderedCards[currentIndex];
-  const totalCards = orderedCards.length;
-  const cardsCompleted = correctCount + incorrectCount;
+  const currentCard = sessionQueue[0];
+  const totalCards = sessionSize;
+  const cardsRemaining = sessionQueue.length;
+  const cardsCompleted = Math.max(0, totalCards - cardsRemaining);
+  const currentCardNumber =
+    cardsRemaining > 0
+      ? Math.min(totalCards - cardsRemaining + 1, totalCards)
+      : totalCards;
 
   const progressPercent = useMemo(() => {
     if (totalCards === 0) return 0;
-    const completedCount = completed
-      ? totalCards
-      : Math.min(cardsCompleted, totalCards);
+    const completedCount = Math.min(cardsCompleted, totalCards);
     return Math.round((completedCount / totalCards) * 100);
-  }, [cardsCompleted, completed, totalCards]);
-
-  function moveToNext() {
-    if (currentIndex + 1 >= totalCards) {
-      setCompleted(true);
-    } else {
-      setCurrentIndex((prev: number) => prev + 1);
-    }
-  }
+  }, [cardsCompleted, totalCards]);
 
   async function recordResult(isCorrect: boolean) {
     if (completed) return;
@@ -311,7 +303,22 @@ export function SubjectStudy({
     } else {
       setIncorrectCount((prev: number) => prev + 1);
     }
-    moveToNext();
+
+    // Reorder queue: drop completed cards, optionally cycle missed ones to the back.
+    setSessionQueue((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+
+      const [first, ...rest] = previous;
+      const nextQueue = isCorrect || !repeatIncorrect ? rest : [...rest, first];
+
+      if (nextQueue.length === 0) {
+        setCompleted(true);
+      }
+
+      return nextQueue;
+    });
   }
 
   async function saveSession() {
@@ -369,10 +376,7 @@ export function SubjectStudy({
               ? "Session complete"
               : totalCards === 0
               ? "No cards available"
-              : `Card ${Math.min(
-                  currentIndex + 1,
-                  totalCards
-                )} of ${totalCards}`}
+              : `Card ${currentCardNumber} of ${totalCards}`}
           </h2>
         </div>
         <div className="flex flex-wrap gap-2 text-sm text-slate-300 sm:gap-3">
@@ -398,58 +402,81 @@ export function SubjectStudy({
               Practicing {totalCards} of {cards.length} cards this run.
             </p>
           </div>
-          <div className="flex flex-col gap-2 text-sm text-slate-300 sm:items-end">
-            <span className="font-medium text-slate-200">Cards this run</span>
-            {cards.length > 1 && sessionSizeOptions.length > 0 && (
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                {sessionSizeOptions.map((option) => {
-                  const isSelected = sessionSize === option;
-                  return (
-                    <Button
-                      key={`session-size-${option}`}
-                      type="button"
-                      size="sm"
-                      variant={isSelected ? "primary" : "secondary"}
-                      aria-pressed={isSelected}
-                      onClick={() => handleSessionSizeSelect(option)}
-                      disabled={cards.length === 0 || hasActiveProgress}
-                    >
-                      {option}
-                    </Button>
-                  );
-                })}
-                <Button
-                  key="session-size-all"
-                  type="button"
-                  size="sm"
-                  variant={
-                    sessionSize === cards.length ? "primary" : "secondary"
-                  }
-                  aria-pressed={sessionSize === cards.length}
-                  onClick={() => handleSessionSizeSelect(cards.length)}
-                  disabled={cards.length === 0 || hasActiveProgress}
-                >
-                  All ({cards.length})
-                </Button>
-              </div>
-            )}
-            {cards.length === 1 && (
-              <span className="text-xs text-slate-500">
-                Only one card available. We&apos;ll include it every run.
+          <div className="flex flex-col gap-4 text-sm text-slate-300 sm:items-end">
+            <div className="flex flex-col gap-2 sm:items-end">
+              <span className="font-medium text-slate-200">Cards this run</span>
+              {cards.length > 1 && sessionSizeOptions.length > 0 && (
+                <div className="flex flex-wrap gap-2 sm:justify-end">
+                  {sessionSizeOptions.map((option) => {
+                    const isSelected = sessionSize === option;
+                    return (
+                      <Button
+                        key={`session-size-${option}`}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? "primary" : "secondary"}
+                        aria-pressed={isSelected}
+                        onClick={() => handleSessionSizeSelect(option)}
+                        disabled={cards.length === 0 || hasActiveProgress}
+                      >
+                        {option}
+                      </Button>
+                    );
+                  })}
+                  <Button
+                    key="session-size-all"
+                    type="button"
+                    size="sm"
+                    variant={
+                      sessionSize === cards.length ? "primary" : "secondary"
+                    }
+                    aria-pressed={sessionSize === cards.length}
+                    onClick={() => handleSessionSizeSelect(cards.length)}
+                    disabled={cards.length === 0 || hasActiveProgress}
+                  >
+                    All ({cards.length})
+                  </Button>
+                </div>
+              )}
+              {cards.length === 1 && (
+                <span className="text-xs text-slate-500">
+                  Only one card available. We&apos;ll include it every run.
+                </span>
+              )}
+              {cards.length === 0 && (
+                <span className="text-xs text-slate-500">
+                  Add cards to start practicing.
+                </span>
+              )}
+              {cards.length > 1 && (
+                <span className="text-xs text-slate-500 sm:text-right">
+                  {hasActiveProgress
+                    ? "Finish this run to adjust the session size."
+                    : "Choose a preset or pick All to study the whole subject."}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <span className="font-medium text-slate-200">
+                Repeat missed cards
               </span>
-            )}
-            {cards.length === 0 && (
-              <span className="text-xs text-slate-500">
-                Add cards to start practicing.
-              </span>
-            )}
-            {cards.length > 1 && (
-              <span className="text-xs text-slate-500">
+              <Button
+                type="button"
+                size="sm"
+                variant={repeatIncorrect ? "primary" : "secondary"}
+                aria-pressed={repeatIncorrect}
+                onClick={() => setRepeatIncorrect((prev) => !prev)}
+                disabled={hasActiveProgress}
+                className="px-4"
+              >
+                {repeatIncorrect ? "Enabled" : "Disabled"}
+              </Button>
+              <span className="text-xs text-slate-500 sm:text-right">
                 {hasActiveProgress
-                  ? "Finish this run to adjust the session size."
-                  : "Choose a preset or pick All to study the whole subject."}
+                  ? "Finish this run to change this setting."
+                  : "Keep incorrect cards in the queue until they are answered correctly."}
               </span>
-            )}
+            </div>
           </div>
         </div>
       </div>
