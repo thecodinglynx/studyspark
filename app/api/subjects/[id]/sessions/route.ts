@@ -1,11 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-
-import { Prisma } from "@prisma/client";
-import { z } from "zod";
-
-import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { getCurrentSession } from "@/lib/auth";
 
 const cardResultSchema = z.object({
   cardId: z.string().min(1),
@@ -58,13 +55,19 @@ export async function GET(
     incorrect: number;
     durationMin: number;
     count: number;
-  }>((acc, curr) => {
-    acc.correct += curr.correct;
-    acc.incorrect += curr.incorrect;
-    acc.durationMin += curr.durationMin;
-    acc.count += 1;
-    return acc;
-  }, { correct: 0, incorrect: 0, durationMin: 0, count: 0 });
+  }>(
+    (
+      acc,
+      curr: { correct: number; incorrect: number; durationMin: number }
+    ) => {
+      acc.correct += curr.correct;
+      acc.incorrect += curr.incorrect;
+      acc.durationMin += curr.durationMin;
+      acc.count += 1;
+      return acc;
+    },
+    { correct: 0, incorrect: 0, durationMin: 0, count: 0 }
+  );
 
   return NextResponse.json({ sessions, totals });
 }
@@ -101,10 +104,88 @@ export async function POST(
     );
   }
 
+  type TransactionClient = {
+    studySession: {
+      create: (args: {
+        data: {
+          subjectId: string;
+          userId: string;
+          correct: number;
+          incorrect: number;
+          durationMin: number;
+          cardCount: number;
+        };
+      }) => Promise<unknown>;
+    };
+    card: {
+      findMany: (args: {
+        where: { id: { in: string[] }; subjectId: string };
+        select: { id: true };
+      }) => Promise<Array<{ id: string }>>;
+    };
+    cardPerformance: {
+      upsert: (args: {
+        where: { cardId_userId: { cardId: string; userId: string } };
+        update: {
+          correctCount: { increment: number };
+          incorrectCount: { increment: number };
+          lastStudiedAt: Date;
+        };
+        create: {
+          cardId: string;
+          subjectId: string;
+          userId: string;
+          correctCount: number;
+          incorrectCount: number;
+          lastStudiedAt: Date;
+        };
+      }) => Promise<unknown>;
+    };
+  };
+
+  const studySessionClient = prisma as unknown as {
+    studySession: {
+      create: (args: {
+        data: {
+          subjectId: string;
+          userId: string;
+          correct: number;
+          incorrect: number;
+          durationMin: number;
+          cardCount: number;
+        };
+      }) => Promise<unknown>;
+    };
+    card: {
+      findMany: (args: {
+        where: { id: { in: string[] }; subjectId: string };
+        select: { id: true };
+      }) => Promise<Array<{ id: string }>>;
+    };
+    cardPerformance: {
+      upsert: (args: {
+        where: { cardId_userId: { cardId: string; userId: string } };
+        update: {
+          correctCount: { increment: number };
+          incorrectCount: { increment: number };
+          lastStudiedAt: Date;
+        };
+        create: {
+          cardId: string;
+          subjectId: string;
+          userId: string;
+          correctCount: number;
+          incorrectCount: number;
+          lastStudiedAt: Date;
+        };
+      }) => Promise<unknown>;
+    };
+    $transaction: <T>(fn: (tx: unknown) => Promise<T>) => Promise<T>;
+  };
   const { cards } = parsed.data;
 
   if (cards.length > 0) {
-    const totals = cards.reduce(
+    const totalAttempts = cards.reduce(
       (acc, result) => {
         acc.correct += result.correct;
         acc.incorrect += result.incorrect;
@@ -114,8 +195,8 @@ export async function POST(
     );
 
     if (
-      totals.correct !== parsed.data.correct ||
-      totals.incorrect !== parsed.data.incorrect
+      totalAttempts.correct !== parsed.data.correct ||
+      totalAttempts.incorrect !== parsed.data.incorrect
     ) {
       return NextResponse.json(
         { error: "Mismatched card totals" },
@@ -125,34 +206,27 @@ export async function POST(
   }
 
   const now = new Date();
-  const subjectId = params.id;
-  const userId = session.user.id;
 
-  const sessionPayload = {
-    subjectId,
-    userId,
-    correct: parsed.data.correct,
-    incorrect: parsed.data.incorrect,
-    durationMin: parsed.data.durationMin,
-    cardCount: parsed.data.cardCount,
-  };
-
+  let created;
   try {
-    const createdSession = await prisma.$transaction(async (tx) => {
-      const transactionClient = tx as Record<string, unknown>;
-      const cardPerformanceClient = transactionClient.cardPerformance as
-        | {
-            upsert: (...args: unknown[]) => Promise<unknown>;
-          }
-        | undefined;
-      const sessionRecord = await tx.studySession.create({
-        data: sessionPayload,
+    created = await studySessionClient.$transaction(async (tx) => {
+      const transaction = tx as TransactionClient;
+
+      const sessionRecord = await transaction.studySession.create({
+        data: {
+          subjectId: params.id,
+          userId: session.user.id,
+          correct: parsed.data.correct,
+          incorrect: parsed.data.incorrect,
+          durationMin: parsed.data.durationMin,
+          cardCount: parsed.data.cardCount,
+        },
       });
 
       if (cards.length > 0) {
         const cardIds = cards.map((card) => card.cardId);
-        const validCards = await tx.card.findMany({
-          where: { id: { in: cardIds }, subjectId },
+        const validCards = await transaction.card.findMany({
+          where: { id: { in: cardIds }, subjectId: params.id },
           select: { id: true },
         });
 
@@ -160,15 +234,11 @@ export async function POST(
           throw new Error("Invalid card references");
         }
 
-        if (!cardPerformanceClient) {
-          throw new Error("CardPerformance model is not available");
-        }
-
         await Promise.all(
           cards.map((card) =>
-            cardPerformanceClient.upsert({
+            transaction.cardPerformance.upsert({
               where: {
-                cardId_userId: { cardId: card.cardId, userId },
+                cardId_userId: { cardId: card.cardId, userId: session.user.id },
               },
               update: {
                 correctCount: { increment: card.correct },
@@ -177,8 +247,8 @@ export async function POST(
               },
               create: {
                 cardId: card.cardId,
-                subjectId,
-                userId,
+                subjectId: params.id,
+                userId: session.user.id,
                 correctCount: card.correct,
                 incorrectCount: card.incorrect,
                 lastStudiedAt: now,
@@ -190,11 +260,6 @@ export async function POST(
 
       return sessionRecord;
     });
-
-    revalidatePath(`/subjects/${subjectId}`);
-    revalidatePath("/dashboard");
-
-    return NextResponse.json(createdSession, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "Invalid card references") {
       return NextResponse.json(
@@ -203,45 +268,15 @@ export async function POST(
       );
     }
 
-    if (
-      (error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2021") ||
-      (error instanceof Error &&
-        error.message === "CardPerformance model is not available")
-    ) {
-      console.warn(
-        "CardPerformance table missing; recording session without per-card stats"
-      );
-
-      if (cards.length > 0) {
-        const cardIds = cards.map((card) => card.cardId);
-        const validCards = await prisma.card.findMany({
-          where: { id: { in: cardIds }, subjectId },
-          select: { id: true },
-        });
-
-        if (validCards.length !== cards.length) {
-          return NextResponse.json(
-            { error: "Invalid card references" },
-            { status: 400 }
-          );
-        }
-      }
-
-      const fallbackSession = await prisma.studySession.create({
-        data: sessionPayload,
-      });
-
-      revalidatePath(`/subjects/${subjectId}`);
-      revalidatePath("/dashboard");
-
-      return NextResponse.json(fallbackSession, { status: 201 });
-    }
-
     console.error("Failed to record study session", error);
     return NextResponse.json(
       { error: "Failed to record session" },
       { status: 500 }
     );
   }
+
+  revalidatePath(`/subjects/${params.id}`);
+  revalidatePath("/dashboard");
+
+  return NextResponse.json(created, { status: 201 });
 }
