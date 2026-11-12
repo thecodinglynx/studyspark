@@ -8,18 +8,19 @@ const payloadSchema = z.object({
 });
 
 async function ensureParticipant(subjectId: string, userId: string) {
-  return (await prisma.subject.findFirst({
+  return prisma.subject.findFirst({
     where: {
       id: subjectId,
       OR: [{ ownerId: userId }, { shares: { some: { userId } } }],
     },
-  })) as { id: string; type?: "FLASHCARDS" | "CHECKLIST" } | null;
+  });
 }
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
 
   if (!session?.user?.id) {
@@ -47,16 +48,7 @@ export async function POST(
     return NextResponse.json({ error: "No items provided" }, { status: 400 });
   }
 
-  const checklistClient = prisma as unknown as {
-    checklistItem: {
-      findMany: (args: unknown) => Promise<Array<{ id: string }>>;
-    };
-    checklistEntry: {
-      createMany: (args: unknown) => Promise<unknown>;
-    };
-  };
-
-  const validItems = await checklistClient.checklistItem.findMany({
+  const validItems = await prisma.checklistItem.findMany({
     where: {
       id: { in: uniqueIds },
       subjectId: params.id,
@@ -70,8 +62,8 @@ export async function POST(
 
   const now = new Date();
 
-  await checklistClient.checklistEntry.createMany({
-    data: validItems.map((item: { id: string }) => ({
+  await prisma.checklistEntry.createMany({
+    data: validItems.map((item) => ({
       subjectId: params.id,
       itemId: item.id,
       userId: session.user.id,

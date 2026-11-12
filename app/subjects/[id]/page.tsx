@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
@@ -68,10 +69,11 @@ interface SubjectDetail {
 }
 
 interface SubjectPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default async function SubjectPage({ params }: SubjectPageProps) {
+export default async function SubjectPage(props: SubjectPageProps) {
+  const params = await props.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     redirect("/login");
@@ -95,6 +97,7 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
       orderBy: { position: "asc" },
       include: {
         entries: {
+          where: { userId: session.user.id },
           orderBy: { practicedAt: "desc" },
           take: 1,
         },
@@ -118,13 +121,12 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
         item: { select: { id: true, title: true } },
       },
     },
-  } as const;
+  } satisfies Prisma.SubjectInclude;
 
-  const subject = (await prisma.subject.findUnique({
+  const subject: SubjectDetail | null = await prisma.subject.findUnique({
     where: { id: params.id },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    include: includeConfig as any,
-  })) as SubjectDetail | null;
+    include: includeConfig,
+  });
 
   if (!subject) {
     notFound();
@@ -218,11 +220,19 @@ export default async function SubjectPage({ params }: SubjectPageProps) {
       ? Math.round((flashcardTotals.correct / totalAttempts) * 100)
       : 0;
 
+  // Counted separately: recentChecklistEntries only holds the latest 20.
+  const totalPractices =
+    subject.type === "CHECKLIST"
+      ? await prisma.checklistEntry.count({
+          where: { subjectId: subject.id, userId: session.user.id },
+        })
+      : 0;
+
   const checklistStats =
     subject.type === "CHECKLIST"
       ? {
           itemCount: checklistItems.length,
-          totalPractices: recentChecklistEntries.length,
+          totalPractices,
           lastPracticedAt: recentChecklistEntries[0]?.practicedAt ?? null,
         }
       : null;

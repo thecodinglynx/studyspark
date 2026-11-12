@@ -10,8 +10,9 @@ const updateSchema = z.object({
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string; cardId: string } }
+  context: { params: Promise<{ id: string; cardId: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -65,8 +66,9 @@ export async function PUT(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string; cardId: string } }
+  context: { params: Promise<{ id: string; cardId: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
@@ -21,8 +22,9 @@ async function canAccessSubject(userId: string, subjectId: string) {
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,7 +63,7 @@ export async function GET(
         item: { select: { id: true, title: true } },
       },
     },
-  } as const;
+  } satisfies Prisma.SubjectInclude;
 
   const subject = await prisma.subject.findFirst({
     where: {
@@ -71,8 +73,7 @@ export async function GET(
         { shares: { some: { userId: session.user.id } } },
       ],
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    include: includeConfig as any,
+    include: includeConfig,
   });
 
   if (!subject) {
@@ -84,8 +85,9 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -114,8 +116,9 @@ export async function PUT(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -126,7 +129,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.subject.delete({ where: { id: params.id } });
+  // Cards, shares and study sessions have no ON DELETE CASCADE in the schema,
+  // so they are removed explicitly. Checklist items, checklist entries and
+  // card performance rows cascade from the subject and its cards.
+  await prisma.$transaction([
+    prisma.studySession.deleteMany({ where: { subjectId: params.id } }),
+    prisma.subjectShare.deleteMany({ where: { subjectId: params.id } }),
+    prisma.card.deleteMany({ where: { subjectId: params.id } }),
+    prisma.subject.delete({ where: { id: params.id } }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "StudySpark",
   description:
     "Modern flashcard study companion with collaborative sharing and progress tracking.",
-  metadataBase: new URL("https://studyspark.vercel.app"),
+  metadataBase: new URL("https://studyspark-silk.vercel.app"),
   icons: {
     icon: "/favicon.svg",
   },

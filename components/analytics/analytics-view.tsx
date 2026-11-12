@@ -89,7 +89,7 @@ function getMonthStart(): Date {
 export async function AnalyticsView({ userId }: AnalyticsViewProps) {
   const periodStart = getMonthStart();
 
-  const subjects = (await prisma.subject.findMany({
+  const subjects: SubjectAnalyticsRecord[] = await prisma.subject.findMany({
     where: {
       OR: [{ ownerId: userId }, { shares: { some: { userId } } }],
     },
@@ -143,7 +143,7 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
       },
     },
     orderBy: { updatedAt: "desc" },
-  })) as unknown as SubjectAnalyticsRecord[];
+  });
 
   const monthBuckets = buildMonthBuckets();
 

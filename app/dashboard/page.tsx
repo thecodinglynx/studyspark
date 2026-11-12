@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
@@ -98,16 +99,15 @@ async function getDashboardData(userId: string): Promise<{
       take: 5,
       include: { item: { select: { id: true, title: true } } },
     },
-  } as const;
+  } satisfies Prisma.SubjectInclude;
 
-  const subjects = (await prisma.subject.findMany({
+  const subjects: SubjectWithRelations[] = await prisma.subject.findMany({
     where: {
       OR: [{ ownerId: userId }, { shares: { some: { userId } } }],
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    include: includeConfig as any,
+    include: includeConfig,
     orderBy: { updatedAt: "desc" },
-  })) as unknown as SubjectWithRelations[];
+  });
 
   const totals = await prisma.studySession.aggregate({
     where: { userId },
@@ -119,26 +119,7 @@ async function getDashboardData(userId: string): Promise<{
     _count: true,
   });
 
-  type ProgressRecord = {
-    subjectId: string;
-    _sum: {
-      correct: number | null;
-      incorrect: number | null;
-      cardCount: number | null;
-    };
-  };
-
-  const studySessionGroupByClient = prisma as unknown as {
-    studySession: {
-      groupBy: (args: {
-        by: ["subjectId"];
-        where: { userId: string };
-        _sum: { correct: true; incorrect: true; cardCount: true };
-      }) => Promise<ProgressRecord[]>;
-    };
-  };
-
-  const progressRecords = await studySessionGroupByClient.studySession.groupBy({
+  const progressRecords = await prisma.studySession.groupBy({
     by: ["subjectId"],
     where: { userId },
     _sum: { correct: true, incorrect: true, cardCount: true },
@@ -147,26 +128,12 @@ async function getDashboardData(userId: string): Promise<{
     progressRecords.map((item) => [item.subjectId, item])
   );
 
-  const checklistProgressRaw = await (
-    prisma as unknown as {
-      checklistEntry: {
-        groupBy: (args: unknown) => Promise<unknown>;
-      };
-    }
-  ).checklistEntry.groupBy({
+  const checklistRecords = await prisma.checklistEntry.groupBy({
     by: ["subjectId"],
     where: { userId },
     _count: { _all: true },
     _max: { practicedAt: true },
   });
-
-  type ChecklistProgressRecord = {
-    subjectId: string;
-    _count: { _all: number };
-    _max: { practicedAt: Date | null };
-  };
-
-  const checklistRecords = checklistProgressRaw as ChecklistProgressRecord[];
   const checklistMap = new Map(
     checklistRecords.map((item) => [item.subjectId, item])
   );
@@ -214,7 +181,7 @@ async function getDashboardData(userId: string): Promise<{
 
   return {
     subjects: enrichedSubjects,
-    totals: totals as DashboardTotals,
+    totals,
   };
 }
 

@@ -10,8 +10,9 @@ const shareSchema = z.object({
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -73,8 +74,9 @@ export async function POST(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -106,14 +108,19 @@ export async function DELETE(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  await prisma.subjectShare.delete({
+  const removed = await prisma.subjectShare.deleteMany({
     where: {
-      subjectId_userId: {
-        subjectId: params.id,
-        userId: userToShare.id,
-      },
+      subjectId: params.id,
+      userId: userToShare.id,
     },
   });
+
+  if (removed.count === 0) {
+    return NextResponse.json(
+      { error: "Subject is not shared with this user" },
+      { status: 404 }
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

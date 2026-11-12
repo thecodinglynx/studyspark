@@ -11,85 +11,11 @@ import {
 import { useRouter } from "next/navigation";
 import { FlipCard } from "@/components/flip-card";
 import { Button } from "@/components/ui/button";
-
-interface StudyCard {
-  id: string;
-  prompt: string;
-  answer: string;
-  stats?: {
-    correctCount: number;
-    incorrectCount: number;
-    lastStudiedAt: string | null;
-  };
-}
-
-function buildSession(
-  list: StudyCard[],
-  desiredCount?: number
-): { cards: StudyCard[]; size: number } {
-  if (list.length === 0) {
-    return { cards: [], size: 0 };
-  }
-
-  const normalizedBase =
-    typeof desiredCount === "number" && Number.isFinite(desiredCount)
-      ? Math.floor(desiredCount)
-      : list.length;
-
-  const normalized =
-    normalizedBase <= 0 ? list.length : Math.min(normalizedBase, list.length);
-
-  const weighted = selectWeightedCards(list, normalized);
-  return {
-    cards: weighted,
-    size: normalized,
-  };
-}
-
-function selectWeightedCards(list: StudyCard[], count: number): StudyCard[] {
-  const pool = list.map((card) => ({
-    card,
-    weight: calculateCardWeight(card),
-  }));
-
-  const selected: StudyCard[] = [];
-
-  while (pool.length > 0 && selected.length < count) {
-    const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
-    if (totalWeight <= 0) {
-      selected.push(
-        ...pool.splice(0, count - selected.length).map((item) => item.card)
-      );
-      break;
-    }
-
-    let roll = Math.random() * totalWeight;
-    let chosenIndex = 0;
-
-    for (let index = 0; index < pool.length; index += 1) {
-      roll -= pool[index].weight;
-      if (roll <= 0) {
-        chosenIndex = index;
-        break;
-      }
-      if (index === pool.length - 1) {
-        chosenIndex = index;
-      }
-    }
-
-    const [picked] = pool.splice(chosenIndex, 1);
-    selected.push(picked.card);
-  }
-
-  return selected;
-}
-
-function calculateCardWeight(card: StudyCard): number {
-  const correct = card.stats?.correctCount ?? 0;
-  const incorrect = card.stats?.incorrectCount ?? 0;
-  const baseWeight = (incorrect + 1) / (correct + 1);
-  return Math.max(baseWeight, 0.1);
-}
+import {
+  buildSession,
+  getSessionSizeOptions,
+  type StudyCard,
+} from "@/lib/study-session";
 
 interface SubjectStudyProps {
   subjectId: string;
@@ -157,6 +83,10 @@ export function SubjectStudy({
     [cards, sessionSize]
   );
 
+  // The two effects below rebuild the run when the deck or the chosen size
+  // changes. They predate the set-state-in-effect rule; restructuring them is
+  // a behaviour change that deserves its own piece of work.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (previousSignatureRef.current === cardsSignature) {
       return;
@@ -220,39 +150,12 @@ export function SubjectStudy({
 
     resetForNewRun(normalizedSize);
   }, [sessionSize, hasActiveProgress, cards.length, completed, resetForNewRun]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const sessionSizeOptions = useMemo(() => {
-    const total = cards.length;
-    if (total <= 1) {
-      return [] as number[];
-    }
-
-    if (total <= 10) {
-      return Array.from({ length: total - 1 }, (_, index) => index + 1);
-    }
-
-    const preferredRatios = [0.1, 0.2, 0.3, 0.4, 0.5];
-    const baseStep = total >= 40 ? 5 : total >= 20 ? 2 : 1;
-
-    const roundToStep = (value: number) => {
-      if (baseStep <= 1) {
-        return Math.max(1, Math.round(value));
-      }
-      return Math.max(baseStep, Math.round(value / baseStep) * baseStep);
-    };
-
-    const options = preferredRatios
-      .map((ratio) => roundToStep(total * ratio))
-      .filter((count) => count > 0 && count < total);
-
-    if (options.length === 0) {
-      const fallback = Math.min(total - 1, Math.max(1, Math.round(total / 2)));
-      return [fallback];
-    }
-
-    const unique = Array.from(new Set(options)).sort((a, b) => a - b);
-    return unique;
-  }, [cards.length]);
+  const sessionSizeOptions = useMemo(
+    () => getSessionSizeOptions(cards.length),
+    [cards.length]
+  );
 
   const handleSessionSizeSelect = useCallback(
     (nextSize: number) => {

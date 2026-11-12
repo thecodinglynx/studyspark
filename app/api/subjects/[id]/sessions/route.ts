@@ -20,8 +20,9 @@ const sessionSchema = z.object({
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -74,8 +75,9 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -104,84 +106,6 @@ export async function POST(
     );
   }
 
-  type TransactionClient = {
-    studySession: {
-      create: (args: {
-        data: {
-          subjectId: string;
-          userId: string;
-          correct: number;
-          incorrect: number;
-          durationMin: number;
-          cardCount: number;
-        };
-      }) => Promise<unknown>;
-    };
-    card: {
-      findMany: (args: {
-        where: { id: { in: string[] }; subjectId: string };
-        select: { id: true };
-      }) => Promise<Array<{ id: string }>>;
-    };
-    cardPerformance: {
-      upsert: (args: {
-        where: { cardId_userId: { cardId: string; userId: string } };
-        update: {
-          correctCount: { increment: number };
-          incorrectCount: { increment: number };
-          lastStudiedAt: Date;
-        };
-        create: {
-          cardId: string;
-          subjectId: string;
-          userId: string;
-          correctCount: number;
-          incorrectCount: number;
-          lastStudiedAt: Date;
-        };
-      }) => Promise<unknown>;
-    };
-  };
-
-  const studySessionClient = prisma as unknown as {
-    studySession: {
-      create: (args: {
-        data: {
-          subjectId: string;
-          userId: string;
-          correct: number;
-          incorrect: number;
-          durationMin: number;
-          cardCount: number;
-        };
-      }) => Promise<unknown>;
-    };
-    card: {
-      findMany: (args: {
-        where: { id: { in: string[] }; subjectId: string };
-        select: { id: true };
-      }) => Promise<Array<{ id: string }>>;
-    };
-    cardPerformance: {
-      upsert: (args: {
-        where: { cardId_userId: { cardId: string; userId: string } };
-        update: {
-          correctCount: { increment: number };
-          incorrectCount: { increment: number };
-          lastStudiedAt: Date;
-        };
-        create: {
-          cardId: string;
-          subjectId: string;
-          userId: string;
-          correctCount: number;
-          incorrectCount: number;
-          lastStudiedAt: Date;
-        };
-      }) => Promise<unknown>;
-    };
-    $transaction: <T>(fn: (tx: unknown) => Promise<T>) => Promise<T>;
-  };
   const { cards } = parsed.data;
 
   if (cards.length > 0) {
@@ -209,9 +133,7 @@ export async function POST(
 
   let created;
   try {
-    created = await studySessionClient.$transaction(async (tx) => {
-      const transaction = tx as TransactionClient;
-
+    created = await prisma.$transaction(async (transaction) => {
       const sessionRecord = await transaction.studySession.create({
         data: {
           subjectId: params.id,

@@ -1,10 +1,9 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 
 declare global {
-  // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
 }
 
@@ -29,8 +28,7 @@ if (isNeon) {
   neonConfig.webSocketConstructor = ws;
   neonConfig.poolQueryViaFetch = true;
   const adapter = new PrismaNeon({ connectionString });
-  const options = { adapter } as unknown as Prisma.PrismaClientOptions;
-  prismaClient = global.prisma ?? new PrismaClient(options);
+  prismaClient = global.prisma ?? new PrismaClient({ adapter });
 } else {
   prismaClient = global.prisma ?? new PrismaClient();
 }

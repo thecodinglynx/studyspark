@@ -1,6 +1,6 @@
 # StudySpark
 
-A modern flashcard study companion built with Next.js 14, Prisma, Tailwind CSS, and NextAuth.
+A modern flashcard study companion built with Next.js 16, Prisma, Tailwind CSS, and NextAuth.
 
 ## Getting started
 
@@ -50,9 +50,34 @@ Use your browser's device toolbar (Chrome DevTools `Ctrl+Shift+M`) to preview di
 | `npm run build`           | Create a production build.                               |
 | `npm run start`           | Run the production build.                                |
 | `npm run lint`            | Run ESLint.                                              |
+| `npm run typecheck`       | Type-check the project with TypeScript.                  |
+| `npm test`                | Run the full test suite once.                            |
+| `npm run test:watch`      | Re-run tests as files change.                            |
 | `npm run prisma:migrate`  | Apply Prisma migrations locally.                         |
 | `npm run prisma:generate` | Regenerate the Prisma client.                            |
 | `npm run prisma:deploy`   | Apply migrations in production.                          |
+
+## Testing
+
+```powershell
+npm test
+```
+
+The suite is built on [Vitest](https://vitest.dev/) and has two parts:
+
+- **Server tests** (`tests/api`, `tests/pages`, `tests/lib`) call the API route handlers and server-rendered pages directly against a real PostgreSQL database. Only the login session, cache revalidation and navigation are faked.
+- **Component tests** (`tests/components`) render client components in a simulated browser with `fetch`, the router and next-auth mocked.
+
+The server tests need PostgreSQL running. They never touch your development data: they use a separate database named after the one in `DATABASE_URL` with a `_test` suffix (for example `studyspark_test`), create it and apply migrations automatically, and empty its tables before every test. Set `TEST_DATABASE_URL` to use a different database; it must be on localhost and its name must end in `_test`.
+
+To run one part or one file:
+
+```powershell
+npx vitest run --project ui
+npx vitest run --project server tests/api/sessions.test.ts
+```
+
+Pushing to `main` deploys to production, so run `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` first.
 
 ## Environment variables
 
