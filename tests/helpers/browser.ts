@@ -18,6 +18,9 @@ export const router = {
 
 export const navigation = { pathname: "/" };
 
+/** Stands in for lib/navigate, which would reload the page in a real browser. */
+export const hardNavigate = vi.fn<(path: string) => void>();
+
 type SessionState =
   | { status: "loading"; data: null }
   | { status: "unauthenticated"; data: null }
@@ -39,6 +42,7 @@ export const auth: {
 export function resetBrowserFakes() {
   Object.values(router).forEach((fn) => fn.mockReset());
   navigation.pathname = "/";
+  hardNavigate.mockReset();
   auth.session = { status: "unauthenticated", data: null };
   auth.signIn.mockReset();
   auth.signOut.mockReset();

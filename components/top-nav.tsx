@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useEffect, useRef, useState, type SVGProps } from "react";
 import { Button } from "@/components/ui/button";
+import { hardNavigate } from "@/lib/navigate";
 
 export function TopNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const { data: session, status } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -54,11 +54,11 @@ export function TopNav() {
 
   // Sign out without letting next-auth redirect. Its redirect target comes
   // from the NEXTAUTH_URL setting, which sent people to a stale address when
-  // that setting was wrong. Navigating here always stays on the current site.
+  // that setting was wrong. Navigating here always stays on the current site,
+  // and a full load drops any pages the router cached while logged in.
   async function handleLogOut() {
     await signOut({ redirect: false });
-    router.push("/");
-    router.refresh();
+    hardNavigate("/");
   }
 
   const desktopNav = (
@@ -67,6 +67,7 @@ export function TopNav() {
         <Link
           key={link.href}
           href={link.href}
+          prefetch={false}
           className={`transition hover:text-white ${
             pathname?.startsWith(link.href) ? "text-white" : "text-slate-400"
           }`}
@@ -94,6 +95,7 @@ export function TopNav() {
             <Link
               key={link.href}
               href={link.href}
+              prefetch={false}
               onClick={closeMenu}
               className={`block rounded-xl px-3 py-2 text-sm transition hover:bg-white/10 ${
                 pathname?.startsWith(link.href)
@@ -114,6 +116,7 @@ export function TopNav() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link
           href="/"
+          prefetch={false}
           className="text-lg font-semibold tracking-tight text-white"
         >
           StudySpark

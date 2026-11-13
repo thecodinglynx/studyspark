@@ -6,7 +6,7 @@ import { TopNav } from "@/components/top-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
-import { auth, navigation, router } from "../helpers/browser";
+import { auth, hardNavigate, navigation } from "../helpers/browser";
 
 describe("Button", () => {
   it("is a non-submitting button by default", () => {
@@ -153,10 +153,19 @@ describe("TopNav", () => {
     expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Log out" }));
-    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/"));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith("/"));
     // next-auth must not do the redirect itself: it would use NEXTAUTH_URL.
     expect(auth.signOut).toHaveBeenCalledWith({ redirect: false });
-    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("does not prefetch any navigation link, so logged-out redirects are never cached", () => {
+    render(<TopNav />);
+
+    const links = screen.getAllByRole("link");
+    expect(links.length).toBeGreaterThan(1);
+    for (const link of links) {
+      expect(link).toHaveAttribute("data-prefetch", "false");
+    }
   });
 
   it("shows the Admin link only to admins", () => {

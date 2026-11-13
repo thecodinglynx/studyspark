@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/components/forms/login-form";
 import { SignupForm } from "@/components/forms/signup-form";
-import { auth, fetchCall, jsonResponse, mockFetch, router } from "../helpers/browser";
+import { auth, fetchCall, hardNavigate, jsonResponse, mockFetch } from "../helpers/browser";
 
 describe("LoginForm", () => {
   async function fillAndSubmit(username: string, password: string) {
@@ -14,18 +14,17 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: "Log in" }));
   }
 
-  it("signs in without a full-page redirect and opens the dashboard", async () => {
+  it("signs in without next-auth redirecting and opens the dashboard with a full page load", async () => {
     auth.signIn.mockResolvedValue({ ok: true, error: null });
 
     await fillAndSubmit("  jane ", "secret123");
 
-    await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith("/dashboard"));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith("/dashboard"));
     expect(auth.signIn).toHaveBeenCalledWith("credentials", {
       redirect: false,
       username: "jane",
       password: "secret123",
     });
-    expect(router.refresh).toHaveBeenCalled();
   });
 
   it("does not trim the password", async () => {
@@ -47,7 +46,7 @@ describe("LoginForm", () => {
     await fillAndSubmit("jane", "wrong-password");
 
     expect(await screen.findByText("CredentialsSignin")).toBeInTheDocument();
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(hardNavigate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
   });
 
@@ -93,7 +92,7 @@ describe("SignupForm", () => {
 
     await fillAndSubmit({ name: " Jane Doe ", username: " jane ", password: "secret123" });
 
-    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith("/dashboard"));
     expect(fetchCall(fetchMock)).toEqual({
       url: "/api/signup",
       method: "POST",
@@ -122,7 +121,7 @@ describe("SignupForm", () => {
 
     await fillAndSubmit({ username: "jane", password: "secret123", inviteCode: " ab12cd34 " });
 
-    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith("/dashboard"));
     expect(fetchCall(fetchMock).body).toEqual({
       username: "jane",
       password: "secret123",
@@ -152,7 +151,7 @@ describe("SignupForm", () => {
 
     expect(await screen.findByText("Username already taken")).toBeInTheDocument();
     expect(auth.signIn).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
+    expect(hardNavigate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
   });
 
@@ -163,7 +162,7 @@ describe("SignupForm", () => {
     await fillAndSubmit({ username: "jane", password: "secret123" });
 
     expect(await screen.findByText("CredentialsSignin")).toBeInTheDocument();
-    expect(router.push).not.toHaveBeenCalled();
+    expect(hardNavigate).not.toHaveBeenCalled();
   });
 
   it("does not submit while required fields are empty", async () => {
