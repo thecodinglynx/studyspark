@@ -10,6 +10,7 @@ import { ChecklistStudy } from "@/components/subjects/checklist-study";
 import { ChecklistEditor } from "@/components/subjects/checklist-editor";
 import { CardEditor } from "@/components/subjects/card-editor";
 import { ShareManager } from "@/components/subjects/share-manager";
+import { checkAdmin } from "@/lib/admin";
 
 type ShareRole = "VIEWER" | "EDITOR";
 
@@ -78,6 +79,10 @@ export default async function SubjectPage(props: SubjectPageProps) {
   if (!session?.user?.id) {
     redirect("/login");
   }
+
+  // Who else has access to a subject is for admins only. Regular users,
+  // including owners, are not shown (or sent) the other users' names.
+  const isAdmin = (await checkAdmin()).ok;
 
   const includeConfig = {
     cards: {
@@ -372,18 +377,20 @@ export default async function SubjectPage(props: SubjectPageProps) {
             )}
           </Panel>
           <Panel className="h-fit bg-slate-900/70 p-6">
-            <ShareManager
-              subjectId={subject.id}
-              isOwner={subject.ownerId === session.user.id}
-              shares={subject.shares.map((share) => ({
-                id: share.id,
-                role: share.role,
-                username: share.user.username,
-                name: share.user.name ?? null,
-              }))}
-            />
+            {isAdmin && (
+              <ShareManager
+                subjectId={subject.id}
+                isOwner={subject.ownerId === session.user.id}
+                shares={subject.shares.map((share) => ({
+                  id: share.id,
+                  role: share.role,
+                  username: share.user.username,
+                  name: share.user.name ?? null,
+                }))}
+              />
+            )}
             {subject.type === "FLASHCARDS" ? (
-              <div className="mt-8">
+              <div className={isAdmin ? "mt-8" : ""}>
                 <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
                   Recent sessions
                 </h2>
@@ -427,7 +434,7 @@ export default async function SubjectPage(props: SubjectPageProps) {
                 </div>
               </div>
             ) : (
-              <div className="mt-8">
+              <div className={isAdmin ? "mt-8" : ""}>
                 <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
                   Recent practice
                 </h2>

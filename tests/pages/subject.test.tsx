@@ -3,6 +3,7 @@ import SubjectPage from "@/app/subjects/[id]/page";
 import { prisma } from "@/lib/prisma";
 import { signInAs } from "../helpers/auth";
 import {
+  createAdmin,
   createChecklistSubject,
   createFlashcardSubject,
   createStudySession,
@@ -40,7 +41,7 @@ describe("subject page access", () => {
 });
 
 describe("flashcard subject page", () => {
-  it("gives the owner the study view, the card manager and sharing controls", async () => {
+  it("gives a regular owner the study view and the card manager, but no sharing section", async () => {
     const owner = await createUser({ username: "owner" });
     const { subject } = await createFlashcardSubject(owner.id, {
       title: "Chemistry",
@@ -54,12 +55,13 @@ describe("flashcard subject page", () => {
     expect(text).toContain("Exam 3");
     expect(text).toContain("Card 1 of 3");
     expect(text).toContain("Card manager");
-    expect(text).toContain("Invite teammates by username");
-    expect(text).toContain("Share subject");
     expect(text).toContain("No sessions yet. Start your first study run!");
+    expect(text).not.toContain("Sharing");
+    expect(text).not.toContain("Invite teammates by username");
+    expect(text).not.toContain("Share subject");
   });
 
-  it("gives an editor the card manager but not sharing controls", async () => {
+  it("gives an editor the card manager but no sharing section", async () => {
     const owner = await createUser({ username: "owner" });
     const editor = await createUser({ username: "editor" });
     const { subject } = await createFlashcardSubject(owner.id);
@@ -70,7 +72,8 @@ describe("flashcard subject page", () => {
 
     expect(text).toContain("Owned by owner");
     expect(text).toContain("Card manager");
-    expect(text).toContain("These collaborators have access to this subject.");
+    expect(text).not.toContain("Sharing");
+    expect(text).not.toContain("These collaborators have access to this subject.");
     expect(text).not.toContain("Share subject");
   });
 
@@ -85,7 +88,80 @@ describe("flashcard subject page", () => {
 
     expect(text).toContain("Card 1 of 3");
     expect(text).not.toContain("Card manager");
+    expect(text).not.toContain("Sharing");
+    expect(text).not.toContain("These collaborators have access to this subject.");
     expect(text).not.toContain("Share subject");
+  });
+
+  it("does not send other users' names to a viewer in any form", async () => {
+    const owner = await createUser({ username: "owner" });
+    const viewer = await createUser({ username: "viewer" });
+    const pal = await createUser({ username: "secretpal", name: "Secret Pal" });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareSubject(subject.id, viewer.id, "VIEWER");
+    await shareSubject(subject.id, pal.id, "EDITOR");
+
+    signInAs(viewer);
+    const { html } = await render(subject.id);
+
+    expect(html).not.toContain("secretpal");
+    expect(html).not.toContain("Secret Pal");
+  });
+
+  it("does not send other users' names to a regular owner either", async () => {
+    const owner = await createUser({ username: "owner" });
+    const pal = await createUser({ username: "secretpal", name: "Secret Pal" });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareSubject(subject.id, pal.id, "EDITOR");
+
+    signInAs(owner);
+    const { html } = await render(subject.id);
+
+    expect(html).not.toContain("secretpal");
+    expect(html).not.toContain("Secret Pal");
+  });
+
+  it("shows an admin who owns the subject the sharing controls and collaborators", async () => {
+    const admin = await createAdmin();
+    const friend = await createUser({ username: "friend", name: "Best Friend" });
+    const { subject } = await createFlashcardSubject(admin.id);
+    await shareSubject(subject.id, friend.id, "EDITOR");
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Sharing");
+    expect(text).toContain("Invite teammates by username");
+    expect(text).toContain("Share subject");
+    expect(text).toContain("friend Best Friend editor Remove");
+  });
+
+  it("shows an admin who was only given access the collaborators, read-only", async () => {
+    const owner = await createUser({ username: "owner" });
+    const admin = await createAdmin();
+    const friend = await createUser({ username: "friend", name: "Best Friend" });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareSubject(subject.id, admin.id, "VIEWER");
+    await shareSubject(subject.id, friend.id, "EDITOR");
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Sharing");
+    expect(text).toContain("These collaborators have access to this subject.");
+    expect(text).toContain("friend Best Friend editor");
+    expect(text).not.toContain("Share subject");
+    expect(text).not.toContain("Remove");
+  });
+
+  it("does not open a subject for an admin who has no access to it", async () => {
+    const owner = await createUser();
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(owner.id);
+
+    signInAs(admin);
+
+    expect(await redirectTarget(() => open(subject.id))).toBe("/dashboard");
   });
 
   it("shows the user's own totals, accuracy and session history", async () => {
@@ -109,8 +185,8 @@ describe("flashcard subject page", () => {
     expect(text).not.toContain("-8");
   });
 
-  it("lists collaborators", async () => {
-    const owner = await createUser();
+  it("lists collaborators for an admin", async () => {
+    const owner = await createAdmin();
     const friend = await createUser({ username: "friend", name: "Best Friend" });
     const { subject } = await createFlashcardSubject(owner.id);
     await shareSubject(subject.id, friend.id, "EDITOR");
@@ -134,7 +210,7 @@ describe("flashcard subject page", () => {
 });
 
 describe("checklist subject page", () => {
-  it("gives the owner the checklist, its manager and sharing controls", async () => {
+  it("gives a regular owner the checklist and its manager, but no sharing section", async () => {
     const owner = await createUser();
     const { subject } = await createChecklistSubject(owner.id, { title: "Piano" });
 
@@ -145,7 +221,8 @@ describe("checklist subject page", () => {
     expect(text).toContain("Select the items you practiced today");
     expect(text).toContain("Warm-up scales");
     expect(text).toContain("Checklist manager");
-    expect(text).toContain("Share subject");
+    expect(text).not.toContain("Sharing");
+    expect(text).not.toContain("Share subject");
     expect(text).toContain("2 Items 0 Total practices Not practiced yet Last practiced");
     expect(text).not.toContain("Card manager");
   });

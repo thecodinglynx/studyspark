@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { checkAdmin } from "@/lib/admin";
 import { getCurrentSession } from "@/lib/auth";
 
 const baseSubjectSchema = z.object({
@@ -44,6 +45,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isAdmin = (await checkAdmin()).ok;
+
   const subjects = await prisma.subject.findMany({
     where: {
       OR: [
@@ -59,13 +62,18 @@ export async function GET() {
           name: true,
         },
       },
-      shares: {
-        include: {
-          user: {
-            select: { id: true, username: true, name: true },
-          },
-        },
-      },
+      // Who else has access is only for admins to see.
+      ...(isAdmin
+        ? {
+            shares: {
+              include: {
+                user: {
+                  select: { id: true, username: true, name: true },
+                },
+              },
+            },
+          }
+        : {}),
       _count: {
         select: {
           cards: true,

@@ -3,6 +3,7 @@ import { GET, POST } from "@/app/api/subjects/route";
 import { prisma } from "@/lib/prisma";
 import { signInAs } from "../helpers/auth";
 import {
+  createAdmin,
   createChecklistSubject,
   createFlashcardSubject,
   createStudySession,
@@ -57,7 +58,7 @@ describe("GET /api/subjects", () => {
     expect(subjects.find((s) => s.id === shared.id)?.owner.username).toBe("friend");
   });
 
-  it("includes counts, collaborators and only the caller's own recent sessions", async () => {
+  it("includes counts and only the caller's own recent sessions, but not who else has access", async () => {
     const me = await createUser({ username: "me" });
     const friend = await createUser({ username: "friend" });
     const { subject } = await createFlashcardSubject(me.id);
@@ -69,14 +70,39 @@ describe("GET /api/subjects", () => {
     const [listed] = await json<ListedSubject[]>(await GET());
 
     expect(listed._count).toMatchObject({ cards: 3, sessions: 2, checklistItems: 0 });
+    expect(listed.shares).toBeUndefined();
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0].userId).toBe(me.id);
+  });
+
+  it("never reveals other users' names to a regular user, in any part of the response", async () => {
+    const me = await createUser({ username: "me" });
+    const friend = await createUser({ username: "secretpal", name: "Secret Pal" });
+    const { subject } = await createFlashcardSubject(me.id);
+    await shareSubject(subject.id, friend.id, "EDITOR");
+
+    signInAs(me);
+    const text = await (await GET()).text();
+
+    expect(text).not.toContain("secretpal");
+    expect(text).not.toContain("Secret Pal");
+  });
+
+  it("includes collaborators for an admin", async () => {
+    const admin = await createAdmin();
+    const friend = await createUser({ username: "friend" });
+    const { subject } = await createFlashcardSubject(admin.id);
+    await shareSubject(subject.id, friend.id, "EDITOR");
+
+    signInAs(admin);
+    const [listed] = await json<ListedSubject[]>(await GET());
+
     expect(listed.shares).toEqual([
       expect.objectContaining({
         role: "EDITOR",
         user: expect.objectContaining({ username: "friend" }),
       }),
     ]);
-    expect(listed.sessions).toHaveLength(1);
-    expect(listed.sessions[0].userId).toBe(me.id);
   });
 
   it("never exposes password hashes of owners or collaborators", async () => {

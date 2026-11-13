@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { checkAdmin } from "@/lib/admin";
 import { getCurrentSession } from "@/lib/auth";
 
 const updateSchema = z.object({
@@ -30,6 +31,8 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isAdmin = (await checkAdmin()).ok;
+
   const includeConfig = {
     cards: {
       orderBy: { createdAt: "asc" },
@@ -47,9 +50,16 @@ export async function GET(
     owner: {
       select: { id: true, username: true, name: true },
     },
-    shares: {
-      include: { user: { select: { id: true, username: true, name: true } } },
-    },
+    // Who else has access is only for admins to see.
+    ...(isAdmin
+      ? {
+          shares: {
+            include: {
+              user: { select: { id: true, username: true, name: true } },
+            },
+          },
+        }
+      : {}),
     sessions: {
       where: { userId: session.user.id },
       orderBy: { studiedAt: "desc" },

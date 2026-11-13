@@ -3,6 +3,7 @@ import { DELETE, GET, PUT } from "@/app/api/subjects/[id]/route";
 import { prisma } from "@/lib/prisma";
 import { signInAs } from "../helpers/auth";
 import {
+  createAdmin,
   createChecklistSubject,
   createFlashcardSubject,
   createStudySession,
@@ -81,6 +82,40 @@ describe("GET /api/subjects/:id", () => {
 
     expect(body.sessions).toHaveLength(1);
     expect(body.sessions[0].userId).toBe(viewer.id);
+  });
+
+  it("does not tell a regular user who else has access", async () => {
+    const owner = await createUser({ username: "owner" });
+    const viewer = await createUser({ username: "viewer" });
+    const pal = await createUser({ username: "secretpal", name: "Secret Pal" });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareSubject(subject.id, viewer.id);
+    await shareSubject(subject.id, pal.id, "EDITOR");
+
+    for (const user of [viewer, owner]) {
+      signInAs(user);
+      const response = await get(subject.id);
+      const text = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(text).not.toContain("secretpal");
+      expect(text).not.toContain("Secret Pal");
+      expect(JSON.parse(text).shares).toBeUndefined();
+    }
+  });
+
+  it("tells an admin who else has access", async () => {
+    const admin = await createAdmin();
+    const pal = await createUser({ username: "secretpal" });
+    const { subject } = await createFlashcardSubject(admin.id);
+    await shareSubject(subject.id, pal.id, "EDITOR");
+
+    signInAs(admin);
+    const body = await json<{ shares: Array<{ user: { username: string } }> }>(
+      await get(subject.id)
+    );
+
+    expect(body.shares.map((s) => s.user.username)).toEqual(["secretpal"]);
   });
 
   it("hides subjects from users without access", async () => {
