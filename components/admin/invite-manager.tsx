@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { fieldClasses } from "@/components/ui/field-styles";
 import { Input } from "@/components/ui/input";
+import { LocalTime } from "@/components/ui/local-time";
 import { Panel } from "@/components/ui/panel";
 
 interface AdminSubject {
@@ -279,7 +280,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
                     Used {code.usedCount}
                     {code.maxUses !== null ? ` of ${code.maxUses}` : ""}{" "}
                     {code.usedCount === 1 ? "time" : "times"} · created{" "}
-                    {new Date(code.createdAt).toLocaleDateString()}
+                    <LocalTime value={code.createdAt} variant="date" />
                   </p>
                 </div>
                 <div className="flex gap-2">

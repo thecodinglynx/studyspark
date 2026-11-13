@@ -99,9 +99,9 @@ describe("dashboard page", () => {
     const { text } = await render();
 
     expect(text).toContain("Recent sessions");
-    expect(text).toContain("3/3 cards +6 -0 16 min");
-    expect(text).toContain("+2 -0 12 min");
-    expect(text).not.toContain("+1 -0 11 min");
+    expect(text).toContain("3 of 3 cards 6 correct 0 incorrect Studied for 16 min");
+    expect(text).toContain("2 correct 0 incorrect Studied for 12 min");
+    expect(text).not.toContain("1 correct 0 incorrect Studied for 11 min");
   });
 
   it("summarises checklist practice", async () => {
@@ -124,7 +124,7 @@ describe("dashboard page", () => {
     const { text } = await render();
 
     expect(text).toContain(
-      `2 checklist items 2 practices Last practiced ${practicedAt.toLocaleDateString()}`
+      "2 checklist items 2 practices Last practiced Mar 5, 2025"
     );
     expect(text).toContain("Recent practice Warm-up scales");
   });

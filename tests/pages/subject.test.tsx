@@ -181,8 +181,8 @@ describe("flashcard subject page", () => {
     const { text } = await render(subject.id);
 
     expect(text).toContain("3 Cards 3 Correct 1 Incorrect 75% Accuracy");
-    expect(text).toContain("3/3 cards +3 -1 6 min");
-    expect(text).not.toContain("-8");
+    expect(text).toContain("3 of 3 cards 3 correct 1 incorrect Studied for 6 min");
+    expect(text).not.toContain("8 incorrect");
   });
 
   it("lists collaborators for an admin", async () => {
@@ -248,7 +248,7 @@ describe("checklist subject page", () => {
         subjectId: subject.id,
         itemId: items[index % 2].id,
         userId: owner.id,
-        practicedAt: new Date(2025, 0, index + 1, 12),
+        practicedAt: new Date(Date.UTC(2025, 0, index + 1, 12)),
       })),
     });
 
@@ -257,7 +257,7 @@ describe("checklist subject page", () => {
 
     expect(text).toContain("2 Items 25 Total practices");
     expect(text).toContain(
-      `${new Date(2025, 0, 25, 12).toLocaleDateString()} Last practiced`
+      "Jan 25, 2025 Last practiced"
     );
   });
 

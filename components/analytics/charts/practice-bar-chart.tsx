@@ -73,8 +73,11 @@ export function PracticeBarChart({ labels, datasets }: PracticeBarChartProps) {
           },
         },
         y: {
+          beginAtZero: true,
           ticks: {
             color: "#94a3b8",
+            // Whole sessions only: no 0.2, 0.4 ... on the axis.
+            precision: 0,
           },
           grid: {
             color: "rgba(148, 163, 184, 0.1)",

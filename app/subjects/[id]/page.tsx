@@ -5,6 +5,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
+import { LocalTime } from "@/components/ui/local-time";
+import { SessionSummary } from "@/components/subjects/session-summary";
 import { SubjectStudy } from "@/components/subjects/subject-study";
 import { ChecklistStudy } from "@/components/subjects/checklist-study";
 import { ChecklistEditor } from "@/components/subjects/checklist-editor";
@@ -317,11 +319,14 @@ export default async function SubjectPage(props: SubjectPageProps) {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-blue-300">
-                      {checklistStats.lastPracticedAt
-                        ? new Date(
-                            checklistStats.lastPracticedAt
-                          ).toLocaleDateString()
-                        : "Not practiced yet"}
+                      {checklistStats.lastPracticedAt ? (
+                        <LocalTime
+                          value={checklistStats.lastPracticedAt}
+                          variant="date"
+                        />
+                      ) : (
+                        "Not practiced yet"
+                      )}
                     </p>
                     <p>Last practiced</p>
                   </div>
@@ -411,23 +416,16 @@ export default async function SubjectPage(props: SubjectPageProps) {
                     return (
                       <div
                         key={sessionItem.id}
-                        className="grid grid-cols-2 items-center gap-x-4 gap-y-1 rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-left sm:grid-cols-[auto_auto_auto_auto_auto] sm:gap-x-6"
+                        className="rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-xs text-slate-300"
                       >
-                        <span className="text-xs font-medium text-slate-200">
-                          {sessionItem.studiedAt.toLocaleString()}
-                        </span>
-                        <span className="whitespace-nowrap text-right text-blue-300 sm:text-center">
-                          {cardsUsed}/{totalCards} cards
-                        </span>
-                        <span className="text-right text-emerald-300 sm:text-center">
-                          +{sessionItem.correct}
-                        </span>
-                        <span className="text-right text-rose-300 sm:text-center">
-                          -{sessionItem.incorrect}
-                        </span>
-                        <span className="text-right text-slate-300">
-                          {sessionItem.durationMin} min
-                        </span>
+                        <SessionSummary
+                          studiedAt={sessionItem.studiedAt.toISOString()}
+                          cardsUsed={cardsUsed}
+                          totalCards={totalCards}
+                          correct={sessionItem.correct}
+                          incorrect={sessionItem.incorrect}
+                          durationMin={sessionItem.durationMin}
+                        />
                       </div>
                     );
                   })}
@@ -448,14 +446,15 @@ export default async function SubjectPage(props: SubjectPageProps) {
                   {recentChecklistEntries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3"
+                      className="flex flex-col gap-1 rounded-2xl border border-white/5 bg-white/5 px-4 py-3"
                     >
                       <span className="text-xs font-medium text-slate-200">
                         {entry.itemTitle}
                       </span>
-                      <span className="text-right text-slate-300">
-                        {new Date(entry.practicedAt).toLocaleString()}
-                      </span>
+                      <LocalTime
+                        value={entry.practicedAt}
+                        className="text-slate-400"
+                      />
                     </div>
                   ))}
                 </div>

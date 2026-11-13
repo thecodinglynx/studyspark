@@ -382,7 +382,11 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
                         {highlight.mostFrequent ? (
                           <p className="mt-1">
                             {highlight.mostFrequent.title} (
-                            {highlight.mostFrequent.count} completions)
+                            {highlight.mostFrequent.count}{" "}
+                            {highlight.mostFrequent.count === 1
+                              ? "completion"
+                              : "completions"}
+                            )
                           </p>
                         ) : (
                           <p className="mt-1 text-slate-400">
@@ -397,7 +401,11 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
                         {highlight.leastFrequent ? (
                           <p className="mt-1">
                             {highlight.leastFrequent.title} (
-                            {highlight.leastFrequent.count} completions)
+                            {highlight.leastFrequent.count}{" "}
+                            {highlight.leastFrequent.count === 1
+                              ? "completion"
+                              : "completions"}
+                            )
                           </p>
                         ) : (
                           <p className="mt-1 text-slate-400">

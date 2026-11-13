@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -16,6 +17,9 @@ import {
   getSessionSizeOptions,
   type StudyCard,
 } from "@/lib/study-session";
+
+// True in the browser, false while the server builds the page. See below.
+const subscribeNever = () => () => {};
 
 interface SubjectStudyProps {
   subjectId: string;
@@ -31,6 +35,14 @@ export function SubjectStudy({
   canEditCards = false,
 }: SubjectStudyProps) {
   const router = useRouter();
+  // The first card is drawn at random, so the server and the browser would
+  // pick different ones. The card is only drawn once the page is in the
+  // browser, which avoids a mismatch between the two.
+  const inBrowser = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false
+  );
   const initialSessionSize =
     cards.length === 0 ? 0 : Math.min(10, cards.length);
   const [, startRefresh] = useTransition();
@@ -296,7 +308,7 @@ export function SubjectStudy({
       </header>
 
       <div className="rounded-3xl border border-white/5 bg-white/5 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-5">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
               Session setup
@@ -305,11 +317,11 @@ export function SubjectStudy({
               Practicing {totalCards} of {cards.length} cards this run.
             </p>
           </div>
-          <div className="flex flex-col gap-4 text-sm text-slate-300 sm:items-end">
-            <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-col gap-5 text-sm text-slate-300">
+            <div className="flex flex-col gap-2">
               <span className="font-medium text-slate-200">Cards this run</span>
               {cards.length > 1 && sessionSizeOptions.length > 0 && (
-                <div className="flex flex-wrap gap-2 sm:justify-end">
+                <div className="flex flex-wrap gap-2">
                   {sessionSizeOptions.map((option) => {
                     const isSelected = sessionSize === option;
                     return (
@@ -342,24 +354,24 @@ export function SubjectStudy({
                 </div>
               )}
               {cards.length === 1 && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   Only one card available. We&apos;ll include it every run.
                 </span>
               )}
               {cards.length === 0 && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   Add cards to start practicing.
                 </span>
               )}
               {cards.length > 1 && (
-                <span className="text-xs text-slate-500 sm:text-right">
+                <span className="text-xs text-slate-400">
                   {hasActiveProgress
                     ? "Finish this run to adjust the session size."
                     : "Choose a preset or pick All to study the whole subject."}
                 </span>
               )}
             </div>
-            <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex flex-col gap-2">
               <span className="font-medium text-slate-200">
                 Repeat missed cards
               </span>
@@ -370,11 +382,11 @@ export function SubjectStudy({
                 aria-pressed={repeatIncorrect}
                 onClick={() => setRepeatIncorrect((prev) => !prev)}
                 disabled={hasActiveProgress}
-                className="px-4"
+                className="self-start px-4"
               >
                 {repeatIncorrect ? "Enabled" : "Disabled"}
               </Button>
-              <span className="text-xs text-slate-500 sm:text-right">
+              <span className="text-xs text-slate-400">
                 {hasActiveProgress
                   ? "Finish this run to change this setting."
                   : "Keep incorrect cards in the queue until they are answered correctly."}
@@ -393,12 +405,16 @@ export function SubjectStudy({
       )}
 
       {totalCards > 0 && !completed && currentCard && (
-        <FlipCard
-          key={currentCard.id}
-          className="mt-4"
-          front={<span>{currentCard.prompt}</span>}
-          back={<span>{currentCard.answer}</span>}
-        />
+        inBrowser ? (
+          <FlipCard
+            key={currentCard.id}
+            className="mt-4"
+            front={<span>{currentCard.prompt}</span>}
+            back={<span>{currentCard.answer}</span>}
+          />
+        ) : (
+          <div className="mt-4 min-h-[220px] rounded-3xl bg-white/5 sm:h-64" aria-hidden="true" />
+        )
       )}
 
       {completed && (

@@ -9,7 +9,7 @@ const items = [
     id: "item-1",
     title: "Warm-up scales",
     description: "Ten minutes",
-    lastPracticedAt: "2025-03-01T10:00:00.000Z",
+    lastPracticedAt: "2025-03-01T12:00:00.000Z",
   },
   { id: "item-2", title: "Sight reading", description: null, lastPracticedAt: null },
 ];
@@ -30,11 +30,8 @@ describe("ChecklistStudy", () => {
 
     expect(screen.getByRole("checkbox", { name: /Warm-up scales/ })).not.toBeChecked();
     expect(screen.getByText("Ten minutes")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        `Last practiced ${new Date("2025-03-01T10:00:00.000Z").toLocaleDateString()}`
-      )
-    ).toBeInTheDocument();
+    const row = screen.getByText("Warm-up scales").closest("li") as HTMLElement;
+    expect(row).toHaveTextContent(/Last practiced\s+Mar 1, 2025/);
     expect(screen.getByText("Last practiced Never")).toBeInTheDocument();
     expect(screen.getByText("0 selected")).toBeInTheDocument();
   });
@@ -139,13 +136,11 @@ describe("ChecklistStudy", () => {
 
     renderChecklist({
       recentEntries: [
-        { id: "entry-1", itemTitle: "Arpeggios", practicedAt: "2025-03-02T09:30:00.000Z" },
+        { id: "entry-1", itemTitle: "Arpeggios", practicedAt: "2025-03-02T12:30:00.000Z" },
       ],
     });
 
     expect(screen.getByText("Arpeggios")).toBeInTheDocument();
-    expect(
-      screen.getByText(new Date("2025-03-02T09:30:00.000Z").toLocaleString())
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Mar 2, 2025/)).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,23 @@ function generateId(): string {
   return `card-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
 }
 
+const SUBJECT_TYPES: Array<{
+  value: SubjectTypeOption;
+  label: string;
+  help: string;
+}> = [
+  {
+    value: "FLASHCARDS",
+    label: "Flashcards",
+    help: "Cards with a prompt on the front and an answer on the back. You flip each one and mark yourself right or wrong.",
+  },
+  {
+    value: "CHECKLIST",
+    label: "Checklist",
+    help: "A list of things to practice. You tick off what you did each session.",
+  },
+];
+
 export function CreateSubjectForm() {
   const router = useRouter();
   const [subjectType, setSubjectType] =
@@ -74,23 +91,11 @@ export function CreateSubjectForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const completion = useMemo(() => {
-    if (subjectType === "FLASHCARDS") {
-      const total = cards.length * 2 + 1;
-      const filled =
-        cards.filter(
-          (card: DraftCard) => card.prompt.trim() && card.answer.trim()
-        ).length *
-          2 +
-        (title.trim() ? 1 : 0);
-      return Math.round((filled / Math.max(total, 1)) * 100);
-    }
-
-    const total = items.length + 1;
-    const filled =
-      items.filter((item) => item.title.trim()).length + (title.trim() ? 1 : 0);
-    return Math.round((filled / Math.max(total, 1)) * 100);
-  }, [cards, items, subjectType, title]);
+  const isFlashcards = subjectType === "FLASHCARDS";
+  const filledCount = isFlashcards
+    ? cards.filter((card) => card.prompt.trim() && card.answer.trim()).length
+    : items.filter((item) => item.title.trim()).length;
+  const totalCount = isFlashcards ? cards.length : items.length;
 
   function updateCard(id: string, field: keyof DraftCard, value: string) {
     setCards((prev: DraftCard[]) =>
@@ -223,76 +228,100 @@ export function CreateSubjectForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <Input
-        label="Subject title"
-        placeholder="Organic chemistry essentials"
-        value={title}
-        onChange={(event: ChangeEvent<HTMLInputElement>) =>
-          setTitle(event.target.value)
-        }
-        required
-      />
-      <div className="flex items-center justify-between gap-2 rounded-2xl border border-white/5 bg-white/5 p-3">
-        <span className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          Subject type
+    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <div className="flex flex-col gap-2">
+        <span
+          id="subject-type-label"
+          className="text-sm font-medium text-slate-200"
+        >
+          What are you creating?
         </span>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={subjectType === "FLASHCARDS" ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setSubjectType("FLASHCARDS")}
-          >
-            Flashcards
-          </Button>
-          <Button
-            type="button"
-            variant={subjectType === "CHECKLIST" ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setSubjectType("CHECKLIST")}
-          >
-            Checklist
-          </Button>
+        <div
+          role="radiogroup"
+          aria-labelledby="subject-type-label"
+          className="inline-flex w-fit gap-1 rounded-full border border-slate-600 bg-slate-800 p-1"
+        >
+          {SUBJECT_TYPES.map((option) => {
+            const selected = subjectType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setSubjectType(option.value)}
+                className={`rounded-full px-5 py-1.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${
+                  selected
+                    ? "bg-blue-500 text-white shadow shadow-blue-500/30"
+                    : "text-slate-300 hover:text-white"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
+        <p className="max-w-xl text-sm text-slate-400">
+          {SUBJECT_TYPES.find((option) => option.value === subjectType)?.help}
+        </p>
       </div>
-      <TextArea
-        label="Description"
-        placeholder="Short summary, e.g. Exam 3 study cards"
-        rows={3}
-        value={description}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-          setDescription(event.target.value)
-        }
-      />
-      <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-        <div className="flex items-start justify-between">
+
+      <div className="flex flex-col gap-5">
+        <Input
+          label="Subject title"
+          placeholder="Organic chemistry essentials"
+          value={title}
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            setTitle(event.target.value)
+          }
+          required
+        />
+        <TextArea
+          label="Description (optional)"
+          placeholder="Short summary, e.g. Exam 3 study cards"
+          rows={2}
+          value={description}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+            setDescription(event.target.value)
+          }
+        />
+      </div>
+
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
-              {subjectType === "FLASHCARDS" ? "Cards" : "Checklist items"}
-            </h3>
-            <p className="mt-1 text-xs text-slate-400">
-              {subjectType === "FLASHCARDS"
-                ? "Fill in at least one card to get started."
-                : "Add the steps or tasks you want to practice."}
+            <h2 className="text-lg font-semibold text-white">
+              {isFlashcards ? "Cards" : "Checklist items"}
+            </h2>
+            <p className="text-sm text-slate-400">
+              {isFlashcards
+                ? "Each card has a prompt (the question) and an answer. Add at least one."
+                : "Add the steps or tasks you want to practice. Add at least one."}
             </p>
           </div>
-          <span className="text-xs text-slate-400">{completion}% ready</span>
+          <span className="text-sm text-slate-400" aria-live="polite">
+            {filledCount} of {totalCount} {isFlashcards ? "cards" : "items"}{" "}
+            filled in
+          </span>
         </div>
-        <div className="mt-4 flex flex-col gap-4">
-          {subjectType === "FLASHCARDS"
-            ? cards.map((card) => (
-                <div
+
+        <ol className="flex flex-col gap-4">
+          {isFlashcards
+            ? cards.map((card, index) => (
+                <li
                   key={card.id}
-                  className="rounded-2xl border border-white/5 bg-slate-950/60 p-4"
+                  className="flex flex-col gap-4 rounded-2xl border border-slate-700 bg-slate-900/60 p-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-white">Card</h4>
+                    <h3 className="text-sm font-semibold text-white">
+                      Card {index + 1}
+                    </h3>
                     {cards.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeCard(card.id)}
-                        className="text-xs text-rose-300 hover:text-rose-200"
+                        aria-label={`Remove card ${index + 1}`}
+                        className="rounded-full px-3 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
                       >
                         Remove
                       </button>
@@ -305,7 +334,6 @@ export function CreateSubjectForm() {
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCard(card.id, "prompt", event.target.value)
                     }
-                    className="mt-3"
                     required
                   />
                   <TextArea
@@ -315,24 +343,26 @@ export function CreateSubjectForm() {
                     onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                       updateCard(card.id, "answer", event.target.value)
                     }
-                    className="mt-3"
                     rows={3}
                     required
                   />
-                </div>
+                </li>
               ))
-            : items.map((item) => (
-                <div
+            : items.map((item, index) => (
+                <li
                   key={item.id}
-                  className="rounded-2xl border border-white/5 bg-slate-950/60 p-4"
+                  className="flex flex-col gap-4 rounded-2xl border border-slate-700 bg-slate-900/60 p-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-white">Item</h4>
+                    <h3 className="text-sm font-semibold text-white">
+                      Item {index + 1}
+                    </h3>
                     {items.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
-                        className="text-xs text-rose-300 hover:text-rose-200"
+                        aria-label={`Remove item ${index + 1}`}
+                        className="rounded-full px-3 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
                       >
                         Remove
                       </button>
@@ -345,39 +375,37 @@ export function CreateSubjectForm() {
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateItem(item.id, "title", event.target.value)
                     }
-                    className="mt-3"
                     required
                   />
                   <TextArea
-                    label="Notes"
+                    label="Notes (optional)"
                     placeholder="Optional details or reminders"
                     value={item.description}
                     onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                       updateItem(item.id, "description", event.target.value)
                     }
-                    className="mt-3"
-                    rows={3}
+                    rows={2}
                   />
-                </div>
+                </li>
               ))}
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={subjectType === "FLASHCARDS" ? addCard : addItem}
-          >
-            Add another {subjectType === "FLASHCARDS" ? "card" : "item"}
-          </Button>
-        </div>
-      </div>
+        </ol>
+
+        <button
+          type="button"
+          onClick={isFlashcards ? addCard : addItem}
+          className="rounded-2xl border border-dashed border-slate-600 px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-blue-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+        >
+          + Add another {isFlashcards ? "card" : "item"}
+        </button>
+      </section>
+
       {error && (
-        <p className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">
+        <p role="alert" className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">
           {error}
         </p>
       )}
       {success && (
-        <p className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-300">
+        <p role="status" className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-300">
           {success}
         </p>
       )}

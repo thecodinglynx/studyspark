@@ -193,7 +193,7 @@ export function ChecklistEditor({
           required
         />
         <TextArea
-          label="Notes"
+          label="Notes (optional)"
           placeholder="Optional description or reminders"
           value={newDescription}
           onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
@@ -231,7 +231,7 @@ export function ChecklistEditor({
                   required
                 />
                 <TextArea
-                  label="Notes"
+                  label="Notes (optional)"
                   value={editDescription}
                   onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                     setEditDescription(event.target.value)
@@ -279,6 +279,7 @@ export function ChecklistEditor({
                   <Button
                     type="button"
                     size="sm"
+                    variant="secondary"
                     onClick={() => beginEditing(item)}
                     disabled={loading}
                   >
@@ -288,6 +289,7 @@ export function ChecklistEditor({
                     type="button"
                     size="sm"
                     variant="ghost"
+                    className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
                     onClick={() => handleDeleteItem(item.id)}
                     disabled={loading}
                   >

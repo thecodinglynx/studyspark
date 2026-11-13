@@ -48,7 +48,7 @@ describe("ChecklistEditor", () => {
       renderEditor();
 
       await user.type(addForm().getByLabelText("Title"), " Arpeggios ");
-      await user.type(addForm().getByLabelText("Notes"), " Both hands ");
+      await user.type(addForm().getByLabelText(/^Notes/), " Both hands ");
       await user.click(addForm().getByRole("button", { name: "Add item" }));
 
       await vi.waitFor(() => expect(router.refresh).toHaveBeenCalledTimes(1));
@@ -58,7 +58,7 @@ describe("ChecklistEditor", () => {
         body: { title: "Arpeggios", description: "Both hands" },
       });
       expect(addForm().getByLabelText("Title")).toHaveValue("");
-      expect(addForm().getByLabelText("Notes")).toHaveValue("");
+      expect(addForm().getByLabelText(/^Notes/)).toHaveValue("");
     });
 
     it("leaves the description out when no notes were typed", async () => {

@@ -3,6 +3,7 @@
 import { ChangeEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { LocalTime } from "@/components/ui/local-time";
 
 type ChecklistItem = {
   id: string;
@@ -21,14 +22,6 @@ type ChecklistStudyProps = {
   subjectId: string;
   items: ChecklistItem[];
   recentEntries: RecentEntry[];
-};
-
-const formatDate = (value: string | null) => {
-  if (!value) {
-    return "Never";
-  }
-
-  return new Date(value).toLocaleDateString();
 };
 
 export function ChecklistStudy({
@@ -151,11 +144,16 @@ export function ChecklistStudy({
                 </span>
               </label>
               <p
-                className={`text-xs uppercase tracking-[0.3em] transition-colors duration-300 ${
-                  isSelected ? "text-emerald-200" : "text-slate-500"
+                className={`text-sm transition-colors duration-300 ${
+                  isSelected ? "text-emerald-200" : "text-slate-400"
                 }`}
               >
-                Last practiced {formatDate(item.lastPracticedAt)}
+                Last practiced{" "}
+                {item.lastPracticedAt ? (
+                  <LocalTime value={item.lastPracticedAt} variant="date" />
+                ) : (
+                  "Never"
+                )}
               </p>
             </li>
           );
@@ -202,9 +200,10 @@ export function ChecklistStudy({
               className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3"
             >
               <span className="text-slate-200">{entry.itemTitle}</span>
-              <span className="text-xs uppercase tracking-[0.25em] text-slate-500">
-                {new Date(entry.practicedAt).toLocaleString()}
-              </span>
+              <LocalTime
+                value={entry.practicedAt}
+                className="text-sm text-slate-400"
+              />
             </li>
           ))}
         </ul>

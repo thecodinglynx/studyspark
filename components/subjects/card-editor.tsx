@@ -270,6 +270,7 @@ export function CardEditor({ subjectId, cards, canEdit }: CardEditorProps) {
                   <Button
                     type="button"
                     size="sm"
+                    variant="secondary"
                     onClick={() => beginEditing(card)}
                     disabled={loading}
                   >
@@ -279,6 +280,7 @@ export function CardEditor({ subjectId, cards, canEdit }: CardEditorProps) {
                     type="button"
                     size="sm"
                     variant="ghost"
+                    className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
                     onClick={() => handleDeleteCard(card.id)}
                     disabled={loading}
                   >

@@ -5,6 +5,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { TopNav } from "@/components/top-nav";
 import { Panel } from "@/components/ui/panel";
+import { LocalTime } from "@/components/ui/local-time";
+import { SessionSummary } from "@/components/subjects/session-summary";
 
 type ShareRole = "VIEWER" | "EDITOR";
 type SubjectWithRelations = {
@@ -213,7 +215,7 @@ export default async function DashboardPage() {
           </div>
           <Panel className="w-full max-w-sm bg-slate-900/70">
             <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
-              This month
+              All time
             </h2>
             <div className="mt-4 grid grid-cols-3 gap-4 text-center">
               <div>
@@ -244,7 +246,7 @@ export default async function DashboardPage() {
               <h2 className="text-xl font-semibold text-white">Subjects</h2>
               <Link
                 href="/subjects/new"
-                className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-blue-300 transition hover:border-blue-300 hover:text-blue-200"
+                className="inline-flex items-center justify-center rounded-full bg-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
               >
                 Create subject
               </Link>
@@ -265,7 +267,7 @@ export default async function DashboardPage() {
                     </div>
                     <Link
                       href={`/subjects/${subject.id}`}
-                      className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-blue-300 hover:border-blue-300"
+                      className="rounded-full bg-blue-500/15 px-4 py-1.5 text-sm font-medium text-blue-200 transition hover:bg-blue-500/25"
                     >
                       Open
                     </Link>
@@ -275,7 +277,10 @@ export default async function DashboardPage() {
                       {subject.description}
                     </p>
                   )}
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                  <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-400">
+                    <span className="rounded-full bg-white/10 px-2.5 py-0.5 font-medium text-slate-200">
+                      {subject.type === "FLASHCARDS" ? "Flashcards" : "Checklist"}
+                    </span>
                     <span>
                       {subject.type === "FLASHCARDS"
                         ? `${subject._count.cards} cards`
@@ -292,9 +297,17 @@ export default async function DashboardPage() {
                           {subject.analytics.totalPractices} practices
                         </span>
                         <span>
-                          {subject.analytics.lastPracticedAt
-                            ? `Last practiced ${subject.analytics.lastPracticedAt.toLocaleDateString()}`
-                            : "Not practiced yet"}
+                          {subject.analytics.lastPracticedAt ? (
+                            <>
+                              Last practiced{" "}
+                              <LocalTime
+                                value={subject.analytics.lastPracticedAt.toISOString()}
+                                variant="date"
+                              />
+                            </>
+                          ) : (
+                            "Not practiced yet"
+                          )}
                         </span>
                       </>
                     )}
@@ -318,23 +331,16 @@ export default async function DashboardPage() {
                           return (
                             <div
                               key={sessionItem.id}
-                              className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-[auto_auto_auto_auto_auto] sm:gap-x-6"
+                              className="border-t border-white/5 pt-2 first:border-t-0 first:pt-0"
                             >
-                              <span className="text-slate-200">
-                                {sessionItem.studiedAt.toLocaleDateString()}
-                              </span>
-                              <span className="whitespace-nowrap text-right text-blue-300 sm:text-center">
-                                {cardsUsed}/{totalCardsAvailable} cards
-                              </span>
-                              <span className="text-right text-emerald-300 sm:text-center">
-                                +{sessionItem.correct}
-                              </span>
-                              <span className="text-right text-rose-300 sm:text-center">
-                                -{sessionItem.incorrect}
-                              </span>
-                              <span className="text-right text-slate-400">
-                                {sessionItem.durationMin} min
-                              </span>
+                              <SessionSummary
+                                studiedAt={sessionItem.studiedAt.toISOString()}
+                                cardsUsed={cardsUsed}
+                                totalCards={totalCardsAvailable}
+                                correct={sessionItem.correct}
+                                incorrect={sessionItem.incorrect}
+                                durationMin={sessionItem.durationMin}
+                              />
                             </div>
                           );
                         })}
@@ -355,7 +361,10 @@ export default async function DashboardPage() {
                               {entry.item.title}
                             </span>
                             <span className="text-slate-400">
-                              {entry.practicedAt.toLocaleDateString()}
+                              <LocalTime
+                                value={entry.practicedAt.toISOString()}
+                                variant="date"
+                              />
                             </span>
                           </div>
                         ))}

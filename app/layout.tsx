@@ -16,9 +16,11 @@ export const metadata: Metadata = {
   },
 };
 
+// The <html> element has no fixed height. With h-full the background gradient
+// was sized to a single screen and visibly restarted further down long pages.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en">
       <body
         className={`${inter.className} min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100`}
       >
