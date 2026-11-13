@@ -77,7 +77,7 @@ describe("SignupForm", () => {
     const user = userEvent.setup();
     render(<SignupForm />);
     if (fields.name) {
-      await user.type(screen.getByLabelText("Full name"), fields.name);
+      await user.type(screen.getByLabelText(/Full name/), fields.name);
     }
     await user.type(screen.getByLabelText("Username"), fields.username);
     await user.type(screen.getByLabelText("Password"), fields.password);

@@ -3,7 +3,21 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  /* The whole UI is dark. Without this the browser draws native controls
+     (autofilled fields, dropdown lists, checkboxes, scrollbars) in light mode. */
+  color-scheme: dark;
+}
+
+/* Chrome paints autofilled fields with its own colours; keep them in line with
+   the other fields instead of a pale highlight. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: #f1f5f9;
+  caret-color: #f1f5f9;
+  box-shadow: 0 0 0 1000px #1e293b inset;
+  transition: background-color 9999s ease-out 0s;
 }
 
 body {

@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { fieldClasses } from "@/components/ui/field-styles";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 
@@ -166,7 +167,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
                 <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 py-3">
                   <input
                     type="checkbox"
-                    className="mt-1 size-4 cursor-pointer"
+                    className="mt-1 size-4 cursor-pointer accent-blue-500"
                     checked={selected.has(subject.id)}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       toggle(subject.id, event.target.checked)
@@ -211,7 +212,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
                 onChange={(event: ChangeEvent<HTMLSelectElement>) =>
                   setRole(event.target.value as "VIEWER" | "EDITOR")
                 }
-                className="rounded-xl bg-slate-950/70 px-4 py-2 text-slate-200 ring-1 ring-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={fieldClasses}
               >
                 <option value="VIEWER">Viewer (study only)</option>
                 <option value="EDITOR">Editor (can change cards)</option>

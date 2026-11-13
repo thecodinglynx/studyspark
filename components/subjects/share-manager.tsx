@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { fieldClasses } from "@/components/ui/field-styles";
 import { Input } from "@/components/ui/input";
 
 interface Share {
@@ -152,7 +153,7 @@ export function ShareManager({
               onChange={(event: ChangeEvent<HTMLSelectElement>) =>
                 setRole(event.target.value as Share["role"])
               }
-              className="rounded-xl bg-slate-950/70 px-4 py-2 text-slate-200 ring-1 ring-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={fieldClasses}
             >
               <option value="VIEWER">Viewer</option>
               <option value="EDITOR">Editor</option>

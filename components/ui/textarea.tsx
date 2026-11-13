@@ -1,5 +1,6 @@
 import { ForwardedRef, forwardRef, TextareaHTMLAttributes } from "react";
 import { twMerge } from "tailwind-merge";
+import { fieldClasses, fieldErrorClasses } from "@/components/ui/field-styles";
 
 type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label?: string;
@@ -17,8 +18,9 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
       <textarea
         ref={ref}
         className={twMerge(
-          "w-full rounded-2xl bg-slate-900/80 px-4 py-3 text-slate-100 shadow-inner shadow-slate-950/50 ring-1 ring-transparent transition focus:outline-none focus:ring-2 focus:ring-blue-500",
-          error && "ring-2 ring-rose-500",
+          fieldClasses,
+          "rounded-2xl py-3",
+          error && fieldErrorClasses,
           className
         )}
         {...props}

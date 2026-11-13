@@ -57,7 +57,7 @@ export function SignupForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <Input
         name="name"
-        label="Full name"
+        label="Full name (optional)"
         placeholder="Jane Learner"
         autoComplete="name"
       />
