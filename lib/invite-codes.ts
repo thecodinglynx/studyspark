@@ -13,6 +13,19 @@ export function generateInviteCode(length = INVITE_CODE_LENGTH): string {
   return code;
 }
 
+/** What the admin API returns for a code. */
+export const inviteCodeSelect = {
+  id: true,
+  code: true,
+  role: true,
+  maxUses: true,
+  usedCount: true,
+  createdAt: true,
+  subjects: {
+    select: { subject: { select: { id: true, title: true } } },
+  },
+} as const;
+
 /** Codes are case-insensitive, and people paste them with stray spaces. */
 export function normalizeInviteCode(input: string): string {
   return input.trim().toUpperCase();

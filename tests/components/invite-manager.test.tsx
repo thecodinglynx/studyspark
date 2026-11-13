@@ -18,6 +18,7 @@ const codes = [
     maxUses: 5,
     usedCount: 2,
     createdAt: "2026-11-01T10:00:00.000Z",
+    subjectIds: ["s1", "s3"],
     subjectTitles: ["Chemistry", "History"],
   },
 ];
@@ -230,5 +231,149 @@ describe("InviteManager existing codes", () => {
     await user.click(screen.getByRole("button", { name: "Revoke" }));
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("InviteManager editing an existing code", () => {
+  const openEditor = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    return within(screen.getByRole("group", { name: "Edit JOINUS23" }));
+  };
+
+  it("opens an editor showing the code, the current subjects and settings", async () => {
+    const user = userEvent.setup();
+    renderManager({ codes });
+
+    const editor = await openEditor(user);
+
+    expect(editor.getByRole("checkbox", { name: /Chemistry/ })).toBeChecked();
+    expect(editor.getByRole("checkbox", { name: /History/ })).toBeChecked();
+    expect(editor.getByRole("checkbox", { name: /Piano practice/ })).not.toBeChecked();
+    expect(editor.getByText("2 of 3 subjects selected.")).toBeInTheDocument();
+    expect(editor.getByLabelText("Access level")).toHaveValue("EDITOR");
+    expect(editor.getByLabelText(/Maximum signups/)).toHaveValue(5);
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("does not let the code itself be edited, and says so", async () => {
+    const user = userEvent.setup();
+    renderManager({ codes });
+
+    const editor = await openEditor(user);
+
+    expect(editor.queryByDisplayValue("JOINUS23")).not.toBeInTheDocument();
+    expect(editor.getByText(/itself can't be changed/)).toBeInTheDocument();
+  });
+
+  it("explains that edits only affect future signups", async () => {
+    const user = userEvent.setup();
+    renderManager({ codes });
+
+    const editor = await openEditor(user);
+
+    expect(editor.getByText(/anyone who already used this code keeps the access they got/)).toBeInTheDocument();
+  });
+
+  it("sends the changed subjects with PATCH, then refreshes and closes", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "c1" }));
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.click(editor.getByRole("checkbox", { name: /History/ })); // remove
+    await user.click(editor.getByRole("checkbox", { name: /Piano practice/ })); // add
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() => expect(router.refresh).toHaveBeenCalledTimes(1));
+    expect(fetchCall(fetchMock)).toEqual({
+      url: "/api/admin/invite-codes/c1",
+      method: "PATCH",
+      body: { subjectIds: ["s1", "s2"], role: "EDITOR", maxUses: 5 },
+    });
+    expect(screen.queryByRole("group", { name: "Edit JOINUS23" })).not.toBeInTheDocument();
+  });
+
+  it("can change the access level and clear the limit", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "c1" }));
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.selectOptions(editor.getByLabelText("Access level"), "VIEWER");
+    await user.clear(editor.getByLabelText(/Maximum signups/));
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).toEqual({
+      subjectIds: ["s1", "s3"],
+      role: "VIEWER",
+      maxUses: null,
+    });
+  });
+
+  it("filters the subject list without losing the selection", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "c1" }));
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.type(editor.getByLabelText("Find a subject"), "piano");
+    expect(editor.queryByRole("checkbox", { name: /Chemistry/ })).not.toBeInTheDocument();
+    await user.click(editor.getByRole("checkbox", { name: /Piano practice/ }));
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body.subjectIds).toEqual(["s1", "s3", "s2"]);
+  });
+
+  it("will not save with no subjects selected", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch();
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.click(editor.getByRole("checkbox", { name: /Chemistry/ }));
+    await user.click(editor.getByRole("checkbox", { name: /History/ }));
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+
+    expect(editor.getByText(/needs at least one subject/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's error and stays open so nothing typed is lost", async () => {
+    const user = userEvent.setup();
+    mockFetch(jsonResponse({ error: "This code has already been used 2 times, so the limit can't be lower than that." }, 400));
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText(/already been used 2 times/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Edit JOINUS23" })).toBeInTheDocument();
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("cancels without calling the server", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch();
+    renderManager({ codes });
+    const editor = await openEditor(user);
+
+    await user.click(editor.getByRole("checkbox", { name: /Piano practice/ }));
+    await user.click(editor.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("group", { name: "Edit JOINUS23" })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("closes with the Close button", async () => {
+    const user = userEvent.setup();
+    renderManager({ codes });
+    await openEditor(user);
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(screen.queryByRole("group", { name: "Edit JOINUS23" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 });

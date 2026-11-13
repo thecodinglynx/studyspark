@@ -29,7 +29,7 @@ export default async function AdminPage() {
         maxUses: true,
         usedCount: true,
         createdAt: true,
-        subjects: { select: { subject: { select: { title: true } } } },
+        subjects: { select: { subject: { select: { id: true, title: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -69,6 +69,7 @@ export default async function AdminPage() {
             maxUses: code.maxUses,
             usedCount: code.usedCount,
             createdAt: code.createdAt.toISOString(),
+            subjectIds: code.subjects.map((entry) => entry.subject.id),
             subjectTitles: code.subjects.map((entry) => entry.subject.title),
           }))}
         />

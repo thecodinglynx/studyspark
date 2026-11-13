@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DELETE } from "@/app/api/admin/invite-codes/[id]/route";
+import { DELETE, PATCH } from "@/app/api/admin/invite-codes/[id]/route";
 import { GET, POST } from "@/app/api/admin/invite-codes/route";
+import { POST as SIGNUP } from "@/app/api/signup/route";
 import { DELETE as DELETE_SUBJECT } from "@/app/api/subjects/[id]/route";
 import { prisma } from "@/lib/prisma";
 import { signInAs } from "../helpers/auth";
@@ -16,6 +17,9 @@ const create = (body: unknown) =>
   POST(request("POST", "/api/admin/invite-codes", body));
 const revoke = (id: string) =>
   DELETE(request("DELETE", `/api/admin/invite-codes/${id}`), routeContext({ id }));
+
+const edit = (id: string, body: unknown) =>
+  PATCH(request("PATCH", `/api/admin/invite-codes/${id}`, body), routeContext({ id }));
 
 type CodeBody = {
   id: string;
@@ -298,5 +302,249 @@ describe("deleting a subject that has invite codes", () => {
     const links = await prisma.inviteCodeSubject.findMany();
     expect(links.map((l) => l.subjectId)).toEqual([kept.id]);
     expect(await prisma.inviteCode.count()).toBe(1);
+  });
+});
+
+describe("PATCH /api/admin/invite-codes/:id", () => {
+  async function setup(options: Parameters<typeof createInviteCode>[2] = {}) {
+    const admin = await createAdmin();
+    const { subject: a } = await createFlashcardSubject(admin.id, { title: "Chemistry" });
+    const { subject: b } = await createFlashcardSubject(admin.id, { title: "History" });
+    const { subject: c } = await createFlashcardSubject(admin.id, { title: "Piano" });
+    const code = await createInviteCode(admin.id, [a.id, b.id], {
+      code: "KARATEISFUN",
+      ...options,
+    });
+    return { admin, a, b, c, code };
+  }
+
+  const linkedSubjects = async (inviteCodeId: string) =>
+    (await prisma.inviteCodeSubject.findMany({ where: { inviteCodeId } }))
+      .map((link) => link.subjectId)
+      .sort();
+
+  it("rejects anonymous visitors and regular users", async () => {
+    const { a, code } = await setup();
+
+    expect((await edit(code.id, { subjectIds: [a.id] })).status).toBe(401);
+
+    signInAs(await createUser());
+    expect((await edit(code.id, { subjectIds: [a.id] })).status).toBe(403);
+
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+  });
+
+  it("adds and removes subjects in one edit", async () => {
+    const { admin, a, c, code } = await setup();
+
+    signInAs(admin);
+    // Keep Chemistry, drop History, add Piano.
+    const response = await edit(code.id, { subjectIds: [a.id, c.id] });
+
+    expect(response.status).toBe(200);
+    const body = await json<CodeBody>(response);
+    expect(body.subjects.map((s) => s.subject.title).sort()).toEqual(["Chemistry", "Piano"]);
+    expect(await linkedSubjects(code.id)).toEqual([a.id, c.id].sort());
+  });
+
+  it("keeps the code itself exactly as it was", async () => {
+    const { admin, a, code } = await setup();
+
+    signInAs(admin);
+    const body = await json<CodeBody>(await edit(code.id, { subjectIds: [a.id] }));
+
+    expect(body.code).toBe("KARATEISFUN");
+    expect(body.id).toBe(code.id);
+    expect((await prisma.inviteCode.findUniqueOrThrow({ where: { id: code.id } })).code).toBe(
+      "KARATEISFUN"
+    );
+  });
+
+  it("refuses to change the code, and applies nothing else from that request", async () => {
+    const { admin, c, code } = await setup();
+
+    signInAs(admin);
+    const response = await edit(code.id, { code: "NEWCODE99", subjectIds: [c.id], role: "EDITOR" });
+
+    expect(response.status).toBe(400);
+    expect((await json<{ error: string }>(response)).error).toContain("can't be changed");
+    const stored = await prisma.inviteCode.findUniqueOrThrow({ where: { id: code.id } });
+    expect(stored).toMatchObject({ code: "KARATEISFUN", role: "VIEWER" });
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+  });
+
+  it("rejects fields it does not know about", async () => {
+    const { admin, code } = await setup();
+
+    signInAs(admin);
+
+    expect((await edit(code.id, { usedCount: 0 })).status).toBe(400);
+    expect((await edit(code.id, { createdById: "someone" })).status).toBe(400);
+  });
+
+  it("will not leave a code with no subjects", async () => {
+    const { admin, code } = await setup();
+
+    signInAs(admin);
+    const response = await edit(code.id, { subjectIds: [] });
+
+    expect(response.status).toBe(400);
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+  });
+
+  it("changes nothing when one of the subjects does not exist", async () => {
+    const { admin, a, c, code } = await setup({ role: "VIEWER" });
+
+    signInAs(admin);
+    const response = await edit(code.id, { subjectIds: [a.id, c.id, "missing"], role: "EDITOR" });
+
+    expect(response.status).toBe(400);
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+    expect((await prisma.inviteCode.findUniqueOrThrow({ where: { id: code.id } })).role).toBe(
+      "VIEWER"
+    );
+  });
+
+  it("links a subject once even if it is listed twice", async () => {
+    const { admin, c, code } = await setup();
+
+    signInAs(admin);
+    await edit(code.id, { subjectIds: [c.id, c.id] });
+
+    expect(await linkedSubjects(code.id)).toEqual([c.id]);
+  });
+
+  it("can change the access level", async () => {
+    const { admin, code } = await setup();
+
+    signInAs(admin);
+    const body = await json<CodeBody>(await edit(code.id, { role: "EDITOR" }));
+
+    expect(body.role).toBe("EDITOR");
+    // Subjects were not part of the edit, so they stay.
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+  });
+
+  it("can set and remove the signup limit", async () => {
+    const { admin, code } = await setup();
+
+    signInAs(admin);
+    expect((await json<CodeBody>(await edit(code.id, { maxUses: 10 }))).maxUses).toBe(10);
+    expect((await json<CodeBody>(await edit(code.id, { maxUses: null }))).maxUses).toBeNull();
+  });
+
+  it("will not set a limit below the number of times the code was already used", async () => {
+    const { admin, code } = await setup({ usedCount: 3 });
+
+    signInAs(admin);
+    const tooLow = await edit(code.id, { maxUses: 2 });
+
+    expect(tooLow.status).toBe(400);
+    expect((await json<{ error: string }>(tooLow)).error).toContain("already been used 3 times");
+    expect((await edit(code.id, { maxUses: 3 })).status).toBe(200);
+  });
+
+  it("accepts an empty edit and changes nothing", async () => {
+    const { admin, code } = await setup({ role: "EDITOR", maxUses: 4 });
+
+    signInAs(admin);
+    const response = await edit(code.id, {});
+
+    expect(response.status).toBe(200);
+    expect(await json<CodeBody>(response)).toMatchObject({ role: "EDITOR", maxUses: 4 });
+    expect(await linkedSubjects(code.id)).toHaveLength(2);
+  });
+
+  it("returns 404 for a code that does not exist", async () => {
+    const { admin, a } = await setup();
+
+    signInAs(admin);
+
+    expect((await edit("missing", { subjectIds: [a.id] })).status).toBe(404);
+  });
+
+  describe("people who already used the code", () => {
+    const signup = (username: string) =>
+      SIGNUP(
+        request("POST", "/api/signup", {
+          username,
+          password: "secret123",
+          inviteCode: "karateisfun",
+        })
+      );
+
+    it("keep their access when a subject is removed, and are not given the new ones", async () => {
+      const { admin, a, b, c, code } = await setup();
+      const early = await json<{ id: string }>(await signup("early"));
+
+      signInAs(admin);
+      await edit(code.id, { subjectIds: [a.id, c.id] });
+
+      const shares = await prisma.subjectShare.findMany({ where: { userId: early.id } });
+      expect(shares.map((s) => s.subjectId).sort()).toEqual([a.id, b.id].sort());
+    });
+
+    it("do not change the access level they were given", async () => {
+      const { admin, code } = await setup();
+      const early = await json<{ id: string }>(await signup("early"));
+
+      signInAs(admin);
+      await edit(code.id, { role: "EDITOR" });
+
+      const shares = await prisma.subjectShare.findMany({ where: { userId: early.id } });
+      expect(shares.every((s) => s.role === "VIEWER")).toBe(true);
+    });
+
+    it("stay counted against the limit", async () => {
+      const { admin, code } = await setup();
+      await signup("early");
+
+      signInAs(admin);
+      await edit(code.id, { maxUses: 2 });
+
+      expect((await prisma.inviteCode.findUniqueOrThrow({ where: { id: code.id } })).usedCount).toBe(
+        1
+      );
+    });
+  });
+
+  describe("people who sign up afterwards", () => {
+    it("get exactly the edited subjects and access level", async () => {
+      const { admin, a, c, code } = await setup();
+
+      signInAs(admin);
+      await edit(code.id, { subjectIds: [a.id, c.id], role: "EDITOR" });
+
+      const late = await json<{ id: string; subjectsShared: number }>(
+        await SIGNUP(
+          request("POST", "/api/signup", {
+            username: "late",
+            password: "secret123",
+            inviteCode: "KARATEISFUN",
+          })
+        )
+      );
+
+      expect(late.subjectsShared).toBe(2);
+      const shares = await prisma.subjectShare.findMany({ where: { userId: late.id } });
+      expect(shares.map((s) => s.subjectId).sort()).toEqual([a.id, c.id].sort());
+      expect(shares.every((s) => s.role === "EDITOR")).toBe(true);
+    });
+
+    it("are stopped by a lowered limit", async () => {
+      const { admin, code } = await setup();
+
+      signInAs(admin);
+      await edit(code.id, { maxUses: 1 });
+      const first = await SIGNUP(
+        request("POST", "/api/signup", { username: "one", password: "secret123", inviteCode: "KARATEISFUN" })
+      );
+      const second = await SIGNUP(
+        request("POST", "/api/signup", { username: "two", password: "secret123", inviteCode: "KARATEISFUN" })
+      );
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(400);
+    });
   });
 });

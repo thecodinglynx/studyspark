@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkAdmin } from "@/lib/admin";
-import { generateInviteCode, normalizeInviteCode } from "@/lib/invite-codes";
+import {
+  generateInviteCode,
+  inviteCodeSelect,
+  normalizeInviteCode,
+} from "@/lib/invite-codes";
 import { prisma } from "@/lib/prisma";
 
 const createSchema = z.object({
@@ -26,18 +30,6 @@ function isUniqueViolation(error: unknown) {
     error.code === "P2002"
   );
 }
-
-const inviteCodeSelect = {
-  id: true,
-  code: true,
-  role: true,
-  maxUses: true,
-  usedCount: true,
-  createdAt: true,
-  subjects: {
-    select: { subject: { select: { id: true, title: true } } },
-  },
-} as const;
 
 export async function GET() {
   const admin = await checkAdmin();
