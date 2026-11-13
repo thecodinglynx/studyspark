@@ -16,6 +16,7 @@ export async function createUser(
     username?: string;
     name?: string | null;
     role?: "USER" | "ADMIN";
+    groupId?: string | null;
   } = {}
 ) {
   const n = next();
@@ -25,6 +26,7 @@ export async function createUser(
       name: overrides.name === undefined ? `User ${n}` : overrides.name,
       passwordHash: TEST_PASSWORD_HASH,
       ...(overrides.role ? { role: overrides.role } : {}),
+      ...(overrides.groupId ? { groupId: overrides.groupId } : {}),
     },
   });
 }
@@ -161,4 +163,8 @@ export async function createStudySession(
       ...(data.studiedAt ? { studiedAt: data.studiedAt } : {}),
     },
   });
+}
+
+export async function createGroup(name?: string) {
+  return prisma.group.create({ data: { name: name ?? `Group ${next()}` } });
 }

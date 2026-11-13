@@ -12,6 +12,9 @@ const createSchema = z.object({
   subjectIds: z.array(z.string().min(1)).min(1).max(200),
   role: z.enum(["VIEWER", "EDITOR"]).default("VIEWER"),
   maxUses: z.number().int().min(1).max(100000).nullable().optional(),
+  // The group people who sign up with this code join. Left out, a new group
+  // named after the code is made; null means no group.
+  groupId: z.string().min(1).nullable().optional(),
   // A code the admin chose, such as "karateisfun". Left out, one is generated.
   code: z
     .string()
@@ -78,6 +81,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const requestedGroupId = parsed.data.groupId;
+  if (typeof requestedGroupId === "string") {
+    const group = await prisma.group.findUnique({
+      where: { id: requestedGroupId },
+      select: { id: true },
+    });
+    if (!group) {
+      return NextResponse.json(
+        { error: "That group does not exist" },
+        { status: 400 }
+      );
+    }
+  }
+
   const chosenCode = parsed.data.code
     ? normalizeInviteCode(parsed.data.code)
     : null;
@@ -87,17 +104,38 @@ export async function POST(request: Request) {
   // admin chose is never replaced: a clash is reported back instead.
   for (let attempt = 0; attempt < (chosenCode ? 1 : 5); attempt += 1) {
     try {
-      const created = await prisma.inviteCode.create({
-        data: {
-          code: chosenCode ?? generateInviteCode(),
-          role: parsed.data.role,
-          maxUses: parsed.data.maxUses ?? null,
-          createdById: admin.userId,
-          subjects: {
-            createMany: { data: subjectIds.map((subjectId) => ({ subjectId })) },
+      const code = chosenCode ?? generateInviteCode();
+      const created = await prisma.$transaction(async (tx) => {
+        // A new group is named after the code. If a group with that name
+        // already exists (for example from a code that was revoked and is
+        // being made again), it is reused rather than duplicated.
+        const groupId =
+          requestedGroupId === undefined
+            ? (
+                await tx.group.upsert({
+                  where: { name: code },
+                  create: { name: code },
+                  update: {},
+                  select: { id: true },
+                })
+              ).id
+            : requestedGroupId;
+
+        return tx.inviteCode.create({
+          data: {
+            code,
+            role: parsed.data.role,
+            maxUses: parsed.data.maxUses ?? null,
+            groupId,
+            createdById: admin.userId,
+            subjects: {
+              createMany: {
+                data: subjectIds.map((subjectId) => ({ subjectId })),
+              },
+            },
           },
-        },
-        select: inviteCodeSelect,
+          select: inviteCodeSelect,
+        });
       });
       return NextResponse.json(created, { status: 201 });
     } catch (error) {

@@ -199,3 +199,25 @@ describe("DELETE /api/subjects/:id/share", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("sharing directly when the access came from a group", () => {
+  it("turns the group-sourced share into a direct one, so it survives leaving the group", async () => {
+    const { createGroup } = await import("../helpers/factories");
+    const { removeUserFromGroup, shareSubjectWithGroup } = await import("@/lib/groups");
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ username: "owner", groupId: group.id });
+    const friend = await createUser({ username: "friend", groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await prisma.$transaction((tx) =>
+      shareSubjectWithGroup(tx, { subjectId: subject.id, ownerId: owner.id, groupId: group.id, role: "VIEWER" })
+    );
+
+    signInAs(owner);
+    await share(subject.id, { username: "friend", role: "EDITOR" });
+    await prisma.$transaction((tx) => removeUserFromGroup(tx, friend.id));
+
+    expect(await prisma.subjectShare.findMany({ where: { userId: friend.id } })).toEqual([
+      expect.objectContaining({ role: "EDITOR", groupId: null }),
+    ]);
+  });
+});

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { POST } from "@/app/api/signup/route";
+import { shareSubjectWithGroup } from "@/lib/groups";
 import { prisma } from "@/lib/prisma";
 import {
   createAdmin,
   createFlashcardSubject,
+  createGroup,
   createInviteCode,
   createUser,
 } from "../helpers/factories";
@@ -204,5 +206,88 @@ describe("signing up with an invite code", () => {
     const unknown = await json(await signup({ ...base, inviteCode: "NOSUCH23" }));
 
     expect(used).toEqual(unknown);
+  });
+});
+
+describe("signing up with a code that has a group", () => {
+  const signup = (username: string, inviteCode = "JOINUS23") =>
+    POST(request("POST", "/api/signup", { username, password: "secret123", inviteCode }));
+
+  async function setupGrouped() {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id, { title: "Katas" });
+    const group = await createGroup("Karate club");
+    const invite = await createInviteCode(admin.id, [subject.id], { code: "JOINUS23" });
+    await prisma.inviteCode.update({ where: { id: invite.id }, data: { groupId: group.id } });
+    return { admin, subject, group };
+  }
+
+  it("adds the new user to the code's group and says which", async () => {
+    const { group } = await setupGrouped();
+
+    const response = await signup("newbie");
+
+    expect(response.status).toBe(201);
+    const body = await json<{ id: string; groupName: string }>(response);
+    expect(body.groupName).toBe("Karate club");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: body.id } })).groupId).toBe(group.id);
+  });
+
+  it("puts everyone who uses the same code in the same group", async () => {
+    const { group } = await setupGrouped();
+
+    await signup("first");
+    await signup("second");
+    await signup("third");
+
+    const members = await prisma.user.findMany({ where: { groupId: group.id } });
+    expect(members.map((m) => m.username).sort()).toEqual(["first", "second", "third"]);
+  });
+
+  it("also gives the new member what the group's owners have shared", async () => {
+    const { group } = await setupGrouped();
+    const owner = await createUser({ username: "owner", groupId: group.id });
+    const { subject: shared } = await createFlashcardSubject(owner.id, { title: "Shared deck" });
+    await shareSubjectWithGroup(prisma, { subjectId: shared.id, ownerId: owner.id, groupId: group.id, role: "EDITOR" });
+
+    const body = await json<{ id: string }>(await signup("newbie"));
+
+    const shares = await prisma.subjectShare.findMany({ where: { userId: body.id } });
+    expect(shares.map((s) => [s.subjectId, s.role, s.groupId]).sort()).toEqual(
+      [
+        [shared.id, "EDITOR", group.id],
+        // The code's own subject, shared directly as before.
+        [expect.any(String), "VIEWER", null],
+      ].sort()
+    );
+  });
+
+  it("does not group anyone when the code has no group", async () => {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    await createInviteCode(admin.id, [subject.id], { code: "NOGROUP2" });
+
+    const body = await json<{ id: string; groupName?: string }>(await signup("newbie", "NOGROUP2"));
+
+    expect(body.groupName).toBeUndefined();
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: body.id } })).groupId).toBeNull();
+  });
+
+  it("does not group anyone whose signup is refused", async () => {
+    const { group } = await setupGrouped();
+
+    await signup("newbie", "WRONG234");
+
+    expect(await prisma.user.count({ where: { groupId: group.id } })).toBe(0);
+  });
+
+  it("does not group someone whose username is taken", async () => {
+    const { group } = await setupGrouped();
+    await createUser({ username: "taken" });
+
+    const response = await signup("taken");
+
+    expect(response.status).toBe(409);
+    expect(await prisma.user.count({ where: { groupId: group.id } })).toBe(0);
   });
 });

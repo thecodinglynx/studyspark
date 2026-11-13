@@ -1,7 +1,8 @@
 import type { Session } from "next-auth";
 import { describe, expect, it } from "vitest";
 import { authOptions } from "@/lib/auth";
-import { createUser, TEST_PASSWORD } from "../helpers/factories";
+import { prisma } from "@/lib/prisma";
+import { createGroup, createUser, TEST_PASSWORD } from "../helpers/factories";
 
 type Authorize = (
   credentials: Record<string, string> | undefined
@@ -100,12 +101,95 @@ describe("session callbacks", () => {
     expect(session.user.role).toBe("ADMIN");
   });
 
-  it("leaves the token alone on later requests", async () => {
+  it("leaves the user's details alone on later requests", async () => {
     const token = await callbacks.jwt!({
-      token: { id: "user-1", username: "jane" },
+      token: { id: "user-1", username: "jane", profileCheckedAt: Date.now() },
     } as never);
 
-    expect(token).toEqual({ id: "user-1", username: "jane" });
+    expect(token).toMatchObject({ id: "user-1", username: "jane" });
+  });
+
+  describe("role and group in the token", () => {
+    it("looks up the group name at sign-in", async () => {
+      const group = await createGroup("Karate club");
+      const user = await createUser({ username: "grouped", groupId: group.id });
+
+      const token = await callbacks.jwt!({
+        token: {},
+        user: { id: user.id, username: "grouped", role: "USER" },
+      } as never);
+
+      expect(token.groupName).toBe("Karate club");
+      expect(token.profileCheckedAt).toEqual(expect.any(Number));
+    });
+
+    it("has no group name for someone without a group", async () => {
+      const user = await createUser({ username: "loner" });
+
+      const token = await callbacks.jwt!({
+        token: {},
+        user: { id: user.id, username: "loner", role: "USER" },
+      } as never);
+
+      expect(token.groupName).toBeNull();
+    });
+
+    it("does not look again within a minute", async () => {
+      const group = await createGroup("Karate club");
+      const user = await createUser({ username: "grouped", groupId: group.id });
+      const first = await callbacks.jwt!({
+        token: {},
+        user: { id: user.id, username: "grouped", role: "USER" },
+      } as never);
+
+      await prisma.user.update({ where: { id: user.id }, data: { groupId: null } });
+      const second = await callbacks.jwt!({ token: first } as never);
+
+      expect(second.groupName).toBe("Karate club");
+    });
+
+    it("notices a move into or out of a group, and a role change, once the check is stale", async () => {
+      const user = await createUser({ username: "mover" });
+      const group = await createGroup("Karate club");
+      const first = await callbacks.jwt!({
+        token: {},
+        user: { id: user.id, username: "mover", role: "USER" },
+      } as never);
+      expect(first.groupName).toBeNull();
+
+      await prisma.user.update({ where: { id: user.id }, data: { groupId: group.id, role: "ADMIN" } });
+      const stale = { ...first, profileCheckedAt: Date.now() - 61_000 };
+      const second = await callbacks.jwt!({ token: stale } as never);
+
+      expect(second).toMatchObject({ groupName: "Karate club", role: "ADMIN" });
+    });
+
+    it("copes with a user that no longer exists", async () => {
+      const token = await callbacks.jwt!({
+        token: { id: "deleted-user", username: "gone", role: "USER" },
+      } as never);
+
+      expect(token.id).toBe("deleted-user");
+      expect(token.profileCheckedAt).toEqual(expect.any(Number));
+    });
+
+    it("puts the group name on the session", async () => {
+      const session = (await callbacks.session!({
+        session: { user: { name: "Jane" }, expires: "2099-01-01" },
+        token: { id: "user-1", username: "jane", groupName: "Karate club" },
+      } as never)) as Session;
+
+      expect(session.user.groupName).toBe("Karate club");
+    });
+
+    it("puts null on the session when there is no group", async () => {
+      const session = (await callbacks.session!({
+        session: { user: { name: "Jane" }, expires: "2099-01-01" },
+        token: { id: "user-1", username: "jane" },
+      } as never)) as Session;
+
+      expect(session.user.groupName).toBeNull();
+    });
   });
 
   it("exposes the id and username on the session", async () => {

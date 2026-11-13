@@ -10,6 +10,11 @@ const subjects = [
   { id: "s3", title: "History", type: "FLASHCARDS" as const, ownerUsername: "alice", itemCount: 30 },
 ];
 
+const groups = [
+  { id: "g1", name: "Karate club" },
+  { id: "g2", name: "Judo club" },
+];
+
 const codes = [
   {
     id: "c1",
@@ -18,13 +23,15 @@ const codes = [
     maxUses: 5,
     usedCount: 2,
     createdAt: "2026-11-01T10:00:00.000Z",
+    groupId: "g1",
+    groupName: "Karate club",
     subjectIds: ["s1", "s3"],
     subjectTitles: ["Chemistry", "History"],
   },
 ];
 
 const renderManager = (props: Partial<React.ComponentProps<typeof InviteManager>> = {}) =>
-  render(<InviteManager subjects={subjects} codes={[]} {...props} />);
+  render(<InviteManager subjects={subjects} codes={[]} groups={groups} {...props} />);
 
 const generate = () => screen.getByRole("button", { name: "Generate code" });
 const box = (title: string) => screen.getByRole("checkbox", { name: new RegExp(title) });
@@ -288,7 +295,7 @@ describe("InviteManager editing an existing code", () => {
     expect(fetchCall(fetchMock)).toEqual({
       url: "/api/admin/invite-codes/c1",
       method: "PATCH",
-      body: { subjectIds: ["s1", "s2"], role: "EDITOR", maxUses: 5 },
+      body: { subjectIds: ["s1", "s2"], role: "EDITOR", maxUses: 5, groupId: "g1" },
     });
     expect(screen.queryByRole("group", { name: "Edit JOINUS23" })).not.toBeInTheDocument();
   });
@@ -308,6 +315,7 @@ describe("InviteManager editing an existing code", () => {
       subjectIds: ["s1", "s3"],
       role: "VIEWER",
       maxUses: null,
+      groupId: "g1",
     });
   });
 
@@ -375,5 +383,107 @@ describe("InviteManager editing an existing code", () => {
 
     expect(screen.queryByRole("group", { name: "Edit JOINUS23" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+});
+
+describe("InviteManager groups", () => {
+  it("makes a new group named after the code unless told otherwise", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ code: "ABCD2345" }, 201));
+    renderManager();
+
+    await user.click(box("Chemistry"));
+    await user.click(generate());
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).not.toHaveProperty("groupId");
+    expect(screen.getByLabelText(/^Group/, { selector: "select" })).toHaveValue("__new__");
+  });
+
+  it("offers the existing groups, a new one, and none", () => {
+    renderManager();
+
+    const select = screen.getByLabelText(/^Group/, { selector: "select" });
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["New group named after the code", "Karate club", "Judo club", "No group"]);
+  });
+
+  it("can put the code in an existing group", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ code: "ABCD2345" }, 201));
+    renderManager();
+
+    await user.click(box("Chemistry"));
+    await user.selectOptions(screen.getByLabelText(/^Group/, { selector: "select" }), "g2");
+    await user.click(generate());
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).toMatchObject({ groupId: "g2" });
+  });
+
+  it("can make a code with no group", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ code: "ABCD2345" }, 201));
+    renderManager();
+
+    await user.click(box("Chemistry"));
+    await user.selectOptions(screen.getByLabelText(/^Group/, { selector: "select" }), "__none__");
+    await user.click(generate());
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).toMatchObject({ groupId: null });
+  });
+
+  it("goes back to a new group for the next code", async () => {
+    const user = userEvent.setup();
+    mockFetch(jsonResponse({ code: "ABCD2345" }, 201));
+    renderManager();
+    await user.click(box("Chemistry"));
+    await user.selectOptions(screen.getByLabelText(/^Group/, { selector: "select" }), "g1");
+
+    await user.click(generate());
+    await screen.findByTestId("created-code");
+
+    expect(screen.getByLabelText(/^Group/, { selector: "select" })).toHaveValue("__new__");
+  });
+
+  it("shows which group each code's signups join", () => {
+    renderManager({
+      codes: [codes[0], { ...codes[0], id: "c2", code: "OTHER234", groupId: null, groupName: null }],
+    });
+
+    expect(screen.getByText("Signups join the group “Karate club”")).toBeInTheDocument();
+    expect(screen.getByText("Signups are not put in a group")).toBeInTheDocument();
+  });
+
+  it("starts the editor on the code's current group and says nobody is moved", async () => {
+    const user = userEvent.setup();
+    renderManager({ codes });
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = within(screen.getByRole("group", { name: "Edit JOINUS23" }));
+
+    expect(editor.getByLabelText(/^Group/, { selector: "select" })).toHaveValue("g1");
+    expect(editor.getByText(/People who already used it are not moved/)).toBeInTheDocument();
+  });
+
+  it("saves a changed or removed group with the edit", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "c1" }), jsonResponse({ id: "c1" }));
+    renderManager({ codes });
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    let editor = within(screen.getByRole("group", { name: "Edit JOINUS23" }));
+    await user.selectOptions(editor.getByLabelText(/^Group/, { selector: "select" }), "g2");
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchCall(fetchMock, 0).body).toMatchObject({ groupId: "g2" });
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    editor = within(screen.getByRole("group", { name: "Edit JOINUS23" }));
+    await user.selectOptions(editor.getByLabelText(/^Group/, { selector: "select" }), "__none__");
+    await user.click(editor.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchCall(fetchMock, 1).body).toMatchObject({ groupId: null });
   });
 });

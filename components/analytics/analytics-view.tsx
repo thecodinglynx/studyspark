@@ -9,6 +9,9 @@ interface AnalyticsViewProps {
   userId: string;
 }
 
+/** How far back the group comparison looks. */
+const GROUP_HISTORY_DAYS = 120;
+
 /** How far back the page looks. Longer than the charts, so streaks are honest. */
 const HISTORY_DAYS = 365;
 
@@ -66,7 +69,10 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
     }),
   ]);
 
+  const group = await loadGroup(userId, now);
+
   const data: AnalyticsData = {
+    group,
     now: now.toISOString(),
     subjects: subjects.map((subject) => ({
       id: subject.id,
@@ -117,4 +123,84 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
       </section>
     </main>
   );
+}
+
+/**
+ * The viewer's group and its members' recent activity, for the comparison.
+ * Subjects that were not shared with the group are anonymised: members' totals
+ * count, but which private subject they were on is not revealed.
+ */
+export async function loadGroup(
+  userId: string,
+  now: Date
+): Promise<AnalyticsData["group"]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      group: {
+        select: {
+          id: true,
+          name: true,
+          members: {
+            select: { id: true, username: true, name: true },
+            orderBy: { username: "asc" },
+          },
+          subjects: {
+            select: { subject: { select: { id: true, title: true, type: true } } },
+          },
+        },
+      },
+    },
+  });
+  const group = me?.group;
+  if (!group) return undefined;
+
+  const since = new Date(now.getTime() - GROUP_HISTORY_DAYS * 86_400_000);
+  const memberIds = group.members.map((member) => member.id);
+  const sharedSubjects = group.subjects.map((entry) => entry.subject);
+  const sharedIds = new Set(sharedSubjects.map((subject) => subject.id));
+  const visible = (subjectId: string) => (sharedIds.has(subjectId) ? subjectId : "other");
+
+  const [sessions, practices] = await Promise.all([
+    prisma.studySession.findMany({
+      where: { userId: { in: memberIds }, studiedAt: { gte: since } },
+      orderBy: { studiedAt: "asc" },
+      select: {
+        userId: true,
+        subjectId: true,
+        studiedAt: true,
+        correct: true,
+        incorrect: true,
+        durationMin: true,
+      },
+    }),
+    prisma.checklistEntry.findMany({
+      where: { userId: { in: memberIds }, practicedAt: { gte: since } },
+      orderBy: { practicedAt: "asc" },
+      select: { userId: true, subjectId: true, practicedAt: true },
+    }),
+  ]);
+
+  return {
+    name: group.name,
+    members: group.members.map((member) => ({
+      ...member,
+      isYou: member.id === userId,
+    })),
+    sessions: sessions.map((session) => ({
+      userId: session.userId,
+      subjectId: visible(session.subjectId),
+      at: session.studiedAt.toISOString(),
+      correct: session.correct,
+      incorrect: session.incorrect,
+      durationMin: session.durationMin,
+    })),
+    practices: practices.map((practice) => ({
+      userId: practice.userId,
+      subjectId: visible(practice.subjectId),
+      itemId: "",
+      at: practice.practicedAt.toISOString(),
+    })),
+    sharedSubjects,
+  };
 }

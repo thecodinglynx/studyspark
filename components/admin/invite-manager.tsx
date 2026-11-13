@@ -23,22 +23,35 @@ interface AdminInviteCode {
   maxUses: number | null;
   usedCount: number;
   createdAt: string;
+  groupId: string | null;
+  groupName: string | null;
   subjectIds: string[];
   subjectTitles: string[];
 }
 
+interface GroupOption {
+  id: string;
+  name: string;
+}
+
+// Values for the group choice that are not a group.
+const NEW_GROUP = "__new__";
+const NO_GROUP = "__none__";
+
 interface InviteManagerProps {
   subjects: AdminSubject[];
   codes: AdminInviteCode[];
+  groups: GroupOption[];
 }
 
-export function InviteManager({ subjects, codes }: InviteManagerProps) {
+export function InviteManager({ subjects, codes, groups }: InviteManagerProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [role, setRole] = useState<"VIEWER" | "EDITOR">("VIEWER");
   const [maxUses, setMaxUses] = useState("");
   const [customCode, setCustomCode] = useState("");
+  const [group, setGroup] = useState(NEW_GROUP);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -87,6 +100,9 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
           role,
           maxUses: maxUses.trim() ? Number(maxUses) : null,
           code: customCode.trim() || undefined,
+          // Left out, a new group named after the code is made.
+          ...(group === NO_GROUP ? { groupId: null } : {}),
+          ...(group !== NEW_GROUP && group !== NO_GROUP ? { groupId: group } : {}),
         }),
       });
 
@@ -100,6 +116,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
       setSelected(new Set());
       setMaxUses("");
       setCustomCode("");
+      setGroup(NEW_GROUP);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -205,6 +222,28 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
             }
           />
 
+          <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <span className="font-medium text-slate-200">Group</span>
+            <select
+              value={group}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                setGroup(event.target.value)
+              }
+              className={fieldClasses}
+            >
+              <option value={NEW_GROUP}>New group named after the code</option>
+              {groups.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+              <option value={NO_GROUP}>No group</option>
+            </select>
+            <span className="text-xs text-slate-400">
+              Everyone who signs up with this code joins this group.
+            </span>
+          </label>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm text-slate-300">
               <span className="font-medium text-slate-200">
@@ -276,6 +315,11 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
                     {code.role === "EDITOR" ? "Editor" : "Viewer"} access to{" "}
                     {code.subjectTitles.join(", ")}
                   </p>
+                  <p className="text-sm text-slate-300">
+                    {code.groupName
+                      ? `Signups join the group “${code.groupName}”`
+                      : "Signups are not put in a group"}
+                  </p>
                   <p className="text-xs text-slate-400">
                     Used {code.usedCount}
                     {code.maxUses !== null ? ` of ${code.maxUses}` : ""}{" "}
@@ -311,6 +355,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
                 <CodeEditor
                   code={code}
                   subjects={subjects}
+                  groups={groups}
                   onClose={() => setEditingId(null)}
                 />
               )}
@@ -325,6 +370,7 @@ export function InviteManager({ subjects, codes }: InviteManagerProps) {
 interface CodeEditorProps {
   code: AdminInviteCode;
   subjects: AdminSubject[];
+  groups: GroupOption[];
   onClose: () => void;
 }
 
@@ -332,7 +378,7 @@ interface CodeEditorProps {
  * Changes the subjects, access level and signup limit of an existing code.
  * The code itself is shown but cannot be edited.
  */
-function CodeEditor({ code, subjects, onClose }: CodeEditorProps) {
+function CodeEditor({ code, subjects, groups, onClose }: CodeEditorProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(
@@ -344,6 +390,7 @@ function CodeEditor({ code, subjects, onClose }: CodeEditorProps) {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groupChoice, setGroupChoice] = useState(code.groupId ?? NO_GROUP);
 
   const visibleSubjects = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -385,6 +432,7 @@ function CodeEditor({ code, subjects, onClose }: CodeEditorProps) {
           subjectIds: Array.from(selected),
           role,
           maxUses: maxUses.trim() ? Number(maxUses) : null,
+          groupId: groupChoice === NO_GROUP ? null : groupChoice,
         }),
       });
 
@@ -463,6 +511,28 @@ function CodeEditor({ code, subjects, onClose }: CodeEditorProps) {
           </li>
         ))}
       </ul>
+
+      <label className="flex flex-col gap-1 text-sm text-slate-300">
+        <span className="font-medium text-slate-200">Group</span>
+        <select
+          value={groupChoice}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+            setGroupChoice(event.target.value)
+          }
+          className={fieldClasses}
+        >
+          <option value={NO_GROUP}>No group</option>
+          {groups.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-slate-400">
+          Where people who sign up with this code from now on are put. People
+          who already used it are not moved.
+        </span>
+      </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm text-slate-300">

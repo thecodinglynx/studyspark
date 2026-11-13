@@ -6,6 +6,7 @@ type SessionUser = {
   username: string;
   name?: string | null;
   role?: "USER" | "ADMIN";
+  groupName?: string | null;
 };
 
 /** Makes every following server call behave as if `user` is logged in. */
@@ -17,6 +18,7 @@ export function signInAs(user: SessionUser) {
       name: user.name ?? user.username,
       email: null,
       role: user.role ?? "USER",
+      groupName: user.groupName ?? null,
     },
     expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   });

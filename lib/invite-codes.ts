@@ -21,6 +21,8 @@ export const inviteCodeSelect = {
   maxUses: true,
   usedCount: true,
   createdAt: true,
+  groupId: true,
+  group: { select: { id: true, name: true } },
   subjects: {
     select: { subject: { select: { id: true, title: true } } },
   },

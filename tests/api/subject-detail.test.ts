@@ -286,6 +286,29 @@ describe("DELETE /api/subjects/:id", () => {
     expect(await prisma.checklistEntry.count()).toBe(0);
   });
 
+  it("also removes the subject's sharing with a group, and everyone's access to it", async () => {
+    const { createGroup } = await import("../helpers/factories");
+    const { shareSubjectWithGroup } = await import("@/lib/groups");
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ username: "owner", groupId: group.id });
+    const member = await createUser({ username: "member", groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await prisma.$transaction((tx) =>
+      shareSubjectWithGroup(tx, { subjectId: subject.id, ownerId: owner.id, groupId: group.id, role: "VIEWER" })
+    );
+
+    signInAs(owner);
+    const response = await del(subject.id);
+
+    expect(response.status).toBe(200);
+    expect(await prisma.subject.count()).toBe(0);
+    expect(await prisma.groupSubject.count()).toBe(0);
+    expect(await prisma.subjectShare.count({ where: { userId: member.id } })).toBe(0);
+    // The group and its members are untouched.
+    expect(await prisma.group.count()).toBe(1);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).groupId).toBe(group.id);
+  });
+
   it("leaves other subjects untouched", async () => {
     const owner = await createUser();
     const { subject } = await createFlashcardSubject(owner.id);

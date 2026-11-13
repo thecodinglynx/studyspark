@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import AdminPage from "@/app/admin/page";
 import { config as proxyConfig } from "@/proxy";
+import { prisma } from "@/lib/prisma";
 import { signInAs } from "../helpers/auth";
 import {
   createAdmin,
   createChecklistSubject,
   createFlashcardSubject,
+  createGroup,
   createInviteCode,
   createUser,
 } from "../helpers/factories";
@@ -67,5 +69,59 @@ describe("admin page", () => {
     const { text } = renderPage(await AdminPage());
 
     expect(text).toContain("No invite codes yet.");
+  });
+});
+
+describe("admin page groups", () => {
+  it("lists groups with their members, and people who have no group", async () => {
+    const admin = await createAdmin();
+    const group = await createGroup("Karate club");
+    await createUser({ username: "alice", name: "Alice A", groupId: group.id });
+    await createUser({ username: "loner", name: null });
+
+    signInAs(admin);
+    const { text } = renderPage(await AdminPage());
+
+    expect(text).toContain("Groups");
+    expect(text).toContain("Karate club");
+    expect(text).toContain("1 member · 0 invite codes · 0 shared subjects");
+    expect(text).toContain("Alice A (@alice)");
+    // The admin and the other user have no group.
+    expect(text).toContain("People without a group (2)");
+    expect(text).toContain("loner");
+  });
+
+  it("shows which group each code's signups join", async () => {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    const group = await createGroup("Karate club");
+    const code = await createInviteCode(admin.id, [subject.id], { code: "JOINUS23" });
+    await prisma.inviteCode.update({ where: { id: code.id }, data: { groupId: group.id } });
+    await createInviteCode(admin.id, [subject.id], { code: "NOGROUP2" });
+
+    signInAs(admin);
+    const { text } = renderPage(await AdminPage());
+
+    expect(text).toContain("Signups join the group “Karate club”");
+    expect(text).toContain("Signups are not put in a group");
+  });
+
+  it("offers the groups when creating a code", async () => {
+    const admin = await createAdmin();
+    await createGroup("Karate club");
+
+    signInAs(admin);
+    const { html } = renderPage(await AdminPage());
+
+    expect(html).toContain("New group named after the code");
+    expect(html).toContain("No group");
+  });
+
+  it("says so when there are no groups yet", async () => {
+    signInAs(await createAdmin());
+
+    const { text } = renderPage(await AdminPage());
+
+    expect(text).toContain("No groups yet.");
   });
 });

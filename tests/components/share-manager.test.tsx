@@ -25,6 +25,19 @@ describe("ShareManager", () => {
     expect(screen.getByText("viewer")).toBeInTheDocument();
   });
 
+  it("marks access that comes from a group and does not offer to remove it", () => {
+    renderManager({
+      shares: [
+        { id: "share-1", username: "alice", name: "Alice A", role: "VIEWER", viaGroup: true },
+        { id: "share-2", username: "bob", name: null, role: "VIEWER" },
+      ],
+    });
+
+    expect(screen.getByText("via group")).toBeInTheDocument();
+    // Only the direct share can be removed.
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+  });
+
   it("says so when nobody has access yet", () => {
     renderManager({ shares: [] });
 

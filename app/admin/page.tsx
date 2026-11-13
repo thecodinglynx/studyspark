@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { GroupManager } from "@/components/admin/group-manager";
 import { InviteManager } from "@/components/admin/invite-manager";
 import { TopNav } from "@/components/top-nav";
 import { checkAdmin } from "@/lib/admin";
@@ -10,7 +11,7 @@ export default async function AdminPage() {
     redirect(admin.status === 401 ? "/login" : "/dashboard");
   }
 
-  const [subjects, codes] = await Promise.all([
+  const [subjects, codes, groups, ungrouped] = await Promise.all([
     prisma.subject.findMany({
       select: {
         id: true,
@@ -29,9 +30,28 @@ export default async function AdminPage() {
         maxUses: true,
         usedCount: true,
         createdAt: true,
+        groupId: true,
+        group: { select: { name: true } },
         subjects: { select: { subject: { select: { id: true, title: true } } } },
       },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.group.findMany({
+      select: {
+        id: true,
+        name: true,
+        members: {
+          select: { id: true, username: true, name: true },
+          orderBy: { username: "asc" },
+        },
+        _count: { select: { inviteCodes: true, subjects: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { groupId: null },
+      select: { id: true, username: true, name: true },
+      orderBy: { username: "asc" },
     }),
   ]);
 
@@ -44,14 +64,16 @@ export default async function AdminPage() {
             Admin
           </p>
           <h1 className="mt-2 text-4xl font-semibold text-white">
-            Invite codes
+            Invite codes and groups
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-300">
             Pick subjects and generate a code. Anyone who signs up with that
-            code gets access to those subjects straight away.
+            code gets access to those subjects straight away and joins the
+            code&apos;s group.
           </p>
         </header>
         <InviteManager
+          groups={groups.map((group) => ({ id: group.id, name: group.name }))}
           subjects={subjects.map((subject) => ({
             id: subject.id,
             title: subject.title,
@@ -69,9 +91,21 @@ export default async function AdminPage() {
             maxUses: code.maxUses,
             usedCount: code.usedCount,
             createdAt: code.createdAt.toISOString(),
+            groupId: code.groupId,
+            groupName: code.group?.name ?? null,
             subjectIds: code.subjects.map((entry) => entry.subject.id),
             subjectTitles: code.subjects.map((entry) => entry.subject.title),
           }))}
+        />
+        <GroupManager
+          groups={groups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            members: group.members,
+            codeCount: group._count.inviteCodes,
+            subjectCount: group._count.subjects,
+          }))}
+          ungrouped={ungrouped}
         />
       </section>
     </main>

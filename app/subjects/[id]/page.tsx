@@ -12,6 +12,7 @@ import { ChecklistStudy } from "@/components/subjects/checklist-study";
 import { ChecklistEditor } from "@/components/subjects/checklist-editor";
 import { CardEditor } from "@/components/subjects/card-editor";
 import { DeleteSubject } from "@/components/subjects/delete-subject";
+import { ShareWithGroup } from "@/components/subjects/share-with-group";
 import { ShareManager } from "@/components/subjects/share-manager";
 import { checkAdmin } from "@/lib/admin";
 
@@ -21,6 +22,7 @@ interface SubjectShareDetail {
   id: string;
   role: ShareRole;
   userId: string;
+  groupId: string | null;
   user: { id: string; username: string; name: string | null };
 }
 
@@ -69,6 +71,7 @@ interface SubjectDetail {
   checklistItems: ChecklistItemDetail[];
   checklistEntries: ChecklistEntryDetail[];
   shares: SubjectShareDetail[];
+  groupShares: Array<{ groupId: string; role: ShareRole }>;
   sessions: SubjectSessionSummary[];
 }
 
@@ -86,6 +89,14 @@ export default async function SubjectPage(props: SubjectPageProps) {
   // Who else has access to a subject is for admins only. Regular users,
   // including owners, are not shown (or sent) the other users' names.
   const isAdmin = (await checkAdmin()).ok;
+
+  // The group the viewer belongs to, if any, for sharing their own subjects.
+  const viewerGroup = (
+    await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { group: { select: { id: true, name: true } } },
+    })
+  )?.group;
 
   const includeConfig = {
     cards: {
@@ -116,6 +127,7 @@ export default async function SubjectPage(props: SubjectPageProps) {
       include: { user: { select: { id: true, username: true, name: true } } },
       orderBy: { createdAt: "asc" },
     },
+    groupShares: { select: { groupId: true, role: true } },
     sessions: {
       where: { userId: session.user.id },
       orderBy: { studiedAt: "desc" },
@@ -381,6 +393,19 @@ export default async function SubjectPage(props: SubjectPageProps) {
                 )}
               </>
             )}
+            {subject.ownerId === session.user.id && viewerGroup && (
+              <div className="mt-10 border-t border-white/5 pt-8">
+                <ShareWithGroup
+                  subjectId={subject.id}
+                  groupName={viewerGroup.name}
+                  currentRole={
+                    subject.groupShares.find(
+                      (entry) => entry.groupId === viewerGroup.id
+                    )?.role ?? null
+                  }
+                />
+              </div>
+            )}
             {subject.ownerId === session.user.id && (
               <div className="mt-10 border-t border-white/5 pt-8">
                 <DeleteSubject subjectId={subject.id} title={subject.title} />
@@ -397,6 +422,7 @@ export default async function SubjectPage(props: SubjectPageProps) {
                   role: share.role,
                   username: share.user.username,
                   name: share.user.name ?? null,
+                  viaGroup: share.groupId !== null,
                 }))}
               />
             )}

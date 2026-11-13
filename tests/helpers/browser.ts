@@ -26,7 +26,14 @@ type SessionState =
   | { status: "unauthenticated"; data: null }
   | {
       status: "authenticated";
-      data: { user: { id: string; username: string; role?: "USER" | "ADMIN" } };
+      data: {
+        user: {
+          id: string;
+          username: string;
+          role?: "USER" | "ADMIN";
+          groupName?: string | null;
+        };
+      };
     };
 
 export const auth: {

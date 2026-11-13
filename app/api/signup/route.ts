@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import { z } from "zod";
+import { addUserToGroup } from "@/lib/groups";
 import { normalizeInviteCode } from "@/lib/invite-codes";
 
 const payloadSchema = z.object({
@@ -48,7 +49,10 @@ export async function POST(request: Request) {
   const invite = submittedCode
     ? await prisma.inviteCode.findUnique({
         where: { code: submittedCode },
-        include: { subjects: { select: { subjectId: true } } },
+        include: {
+          subjects: { select: { subjectId: true } },
+          group: { select: { name: true } },
+        },
       })
     : null;
 
@@ -93,6 +97,11 @@ export async function POST(request: Request) {
           })),
           skipDuplicates: true,
         });
+
+        // People who sign up with the same code end up in the same group.
+        if (invite.groupId) {
+          await addUserToGroup(tx, created.id, invite.groupId);
+        }
       }
 
       return created;
@@ -110,6 +119,7 @@ export async function POST(request: Request) {
       username: user.username,
       name: user.name,
       ...(invite ? { subjectsShared: invite.subjects.length } : {}),
+      ...(invite?.group ? { groupName: invite.group.name } : {}),
     },
     { status: 201 }
   );

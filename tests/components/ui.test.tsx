@@ -185,6 +185,23 @@ describe("TopNav", () => {
     expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin");
   });
 
+  it("shows the Group link only to people who are in a group", () => {
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-1", username: "jane", groupName: null } },
+    };
+    const { unmount } = render(<TopNav />);
+    expect(screen.queryByRole("link", { name: "Group" })).not.toBeInTheDocument();
+    unmount();
+
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-1", username: "jane", groupName: "Karate club" } },
+    };
+    render(<TopNav />);
+    expect(screen.getByRole("link", { name: "Group" })).toHaveAttribute("href", "/group");
+  });
+
   it("shows neither sign-in nor log out while the session is loading", () => {
     auth.session = { status: "loading", data: null };
     render(<TopNav />);

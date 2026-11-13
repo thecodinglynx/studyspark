@@ -11,6 +11,8 @@ interface Share {
   username: string;
   name: string | null;
   role: "VIEWER" | "EDITOR";
+  /** Access that comes from a group the subject is shared with. */
+  viaGroup?: boolean;
 }
 
 interface ShareManagerProps {
@@ -120,7 +122,10 @@ export function ShareManager({
               <span className="rounded-full bg-slate-950/60 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-400">
                 {share.role.toLowerCase()}
               </span>
-              {isOwner && (
+              {share.viaGroup && (
+                <span className="text-xs text-slate-400">via group</span>
+              )}
+              {isOwner && !share.viaGroup && (
                 <button
                   type="button"
                   onClick={() => handleRemoveShare(share.username)}

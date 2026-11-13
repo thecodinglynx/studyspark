@@ -78,6 +78,19 @@ npm run admin:revoke -- <username>
 
 The role is checked against the database on every admin request, so revoking it takes effect immediately.
 
+## Groups
+
+A group is a set of people who study together. A person is in at most one group.
+
+- **Joining:** every invite code has a group. Creating a code makes a new group named after it (rename it later), or you can put the code in an existing group, or in none. Everyone who signs up with the same code joins the same group. Codes that existed before groups were added each got a group of their own, but nobody was moved into it, because who used each code was never recorded.
+- **Moving people:** on the Admin page, the **Groups** panel lets an admin create, rename and delete groups and move anyone into, out of, or between groups. Deleting a group deletes no accounts and no subjects.
+- **Seeing each other:** members of a group can see who else is in it on the **Group** page (shown in the navigation for people in a group). Nobody can see another group or people outside their own.
+- **Sharing subjects:** the owner of a subject can use **Share with your group** on the subject page to let everyone in their group open it as a viewer or an editor, including people who join later, and can stop sharing at any time. Subjects a member shares appear on every member's dashboard and on the Group page.
+- **Leaving a group:** a person who is moved out loses the access the group gave them, and their own subjects stop being shared with that group. Access an owner or admin gave them directly is kept.
+- **Comparing progress:** the Analytics page has a group section with group totals (who studied this week, study time, accuracy), a table comparing every member (streak, days studied, study time, accuracy, last studied) and a comparison for each subject shared with the group. Only totals are shown, never anyone's individual answers.
+
+Group sharing works by giving each member an ordinary access record for the subject, tagged with the group it came from, so every existing permission check works unchanged. See `lib/groups.ts`.
+
 ## Testing
 
 ```powershell

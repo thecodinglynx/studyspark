@@ -22,6 +22,9 @@ const updateSchema = z
     subjectIds: z.array(z.string().min(1)).min(1).max(200).optional(),
     role: z.enum(["VIEWER", "EDITOR"]).optional(),
     maxUses: z.number().int().min(1).max(100000).nullable().optional(),
+    // Where people who sign up with the code from now on are put. People who
+    // already used it are not moved.
+    groupId: z.string().min(1).nullable().optional(),
   })
   .strict();
 
@@ -59,7 +62,19 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { maxUses, role } = parsed.data;
+  const { maxUses, role, groupId } = parsed.data;
+  if (typeof groupId === "string") {
+    const group = await prisma.group.findUnique({
+      where: { id: groupId },
+      select: { id: true },
+    });
+    if (!group) {
+      return NextResponse.json(
+        { error: "That group does not exist" },
+        { status: 400 }
+      );
+    }
+  }
   if (maxUses != null && maxUses < existing.usedCount) {
     return NextResponse.json(
       {
@@ -107,6 +122,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         data: {
           ...(role ? { role } : {}),
           ...(maxUses !== undefined ? { maxUses } : {}),
+          ...(groupId !== undefined ? { groupId } : {}),
         },
         select: inviteCodeSelect,
       });

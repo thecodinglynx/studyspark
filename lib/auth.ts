@@ -12,6 +12,9 @@ const credentialsSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+/** How often a signed-in user's role and group are looked up again. */
+const PROFILE_REFRESH_MS = 60_000;
+
 export const authOptions: NextAuthOptions = {
   // Decided in one place so the proxy looks for the same cookie name.
   useSecureCookies: shouldUseSecureCookies(),
@@ -73,6 +76,25 @@ export const authOptions: NextAuthOptions = {
         token.username = user.username ?? user.name ?? null;
         token.role = user.role;
       }
+
+      // The role and group can change while someone is signed in (an admin
+      // moves them), so they are looked up again from time to time. The token
+      // only feeds the navigation; every real permission check reads the
+      // database itself.
+      const stale =
+        !token.profileCheckedAt ||
+        Date.now() - token.profileCheckedAt > PROFILE_REFRESH_MS;
+      if (token.id && (user || stale)) {
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true, group: { select: { name: true } } },
+        });
+        if (fresh) {
+          token.role = fresh.role;
+          token.groupName = fresh.group?.name ?? null;
+        }
+        token.profileCheckedAt = Date.now();
+      }
       return token;
     },
     async session({
@@ -85,6 +107,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.username = token.username as string;
+        session.user.groupName = token.groupName ?? null;
         // Only used to show or hide the Admin link. Every admin action checks
         // the role in the database again (see lib/admin.ts).
         session.user.role = (token.role as "USER" | "ADMIN") ?? "USER";

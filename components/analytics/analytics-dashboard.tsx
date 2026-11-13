@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useMemo, useSyncExternalStore } from "react";
 import { AccuracyLineChart } from "@/components/analytics/charts/accuracy-line-chart";
 import { PracticeBarChart } from "@/components/analytics/charts/practice-bar-chart";
+import {
+  GroupAnalytics,
+  type GroupAnalyticsData,
+} from "@/components/analytics/group-analytics";
 import { Panel } from "@/components/ui/panel";
 import {
   MASTERED_MIN_ACCURACY,
@@ -36,6 +40,8 @@ export interface AnalyticsData {
   sessions: SessionPoint[];
   practices: PracticePoint[];
   cardStats: CardStat[];
+  /** Present when the user is in a group. */
+  group?: GroupAnalyticsData;
 }
 
 const WEEKS = 12;
@@ -228,6 +234,10 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </div>
           </Panel>
         </div>
+      )}
+
+      {data.group && (
+        <GroupAnalytics group={data.group} now={data.now} timeZone={timeZone} />
       )}
 
       {view.review.length > 0 && (

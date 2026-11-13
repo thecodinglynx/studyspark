@@ -10,6 +10,8 @@ import {
   createUser,
   shareSubject,
 } from "../helpers/factories";
+import { shareSubjectWithGroup } from "@/lib/groups";
+import { createGroup } from "../helpers/factories";
 import { routeContext } from "../helpers/http";
 import { redirectTarget, renderPage } from "../helpers/render";
 
@@ -325,5 +327,105 @@ describe("checklist subject page", () => {
     expect(text).toContain("Last practiced Never");
     expect(text).not.toMatch(/Last practiced \d/);
     expect(text).toContain("No practice logged yet.");
+  });
+});
+
+describe("sharing a subject with a group", () => {
+  const shareWith = (subjectId: string, ownerId: string, groupId: string, role: "VIEWER" | "EDITOR" = "VIEWER") =>
+    prisma.$transaction((tx) => shareSubjectWithGroup(tx, { subjectId, ownerId, groupId, role }));
+
+  it("offers the owner a way to share with their group", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Share with your group");
+    expect(text).toContain("Share with Karate club");
+    expect(text).not.toContain("Stop sharing");
+  });
+
+  it("shows the current state once it is shared", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareWith(subject.id, owner.id, group.id, "EDITOR");
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Everyone in Karate club can open this subject as an editor");
+    expect(text).toContain("Stop sharing");
+  });
+
+  it("works for checklists too", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ groupId: group.id });
+    const { subject } = await createChecklistSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Share with your group");
+  });
+
+  it("is not offered to an owner who is not in a group", async () => {
+    const owner = await createUser();
+    const { subject } = await createFlashcardSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).not.toContain("Share with your group");
+  });
+
+  it("is not offered to group members who are not the owner, even editors", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ groupId: group.id });
+    const editor = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareWith(subject.id, owner.id, group.id, "EDITOR");
+
+    signInAs(editor);
+    const { text } = await render(subject.id);
+
+    expect(text).not.toContain("Share with your group");
+    expect(text).not.toContain("Delete this subject");
+    // They can open and edit it, as shared.
+    expect(text).toContain("Card manager");
+  });
+
+  it("opens for a member of the group the subject is shared with", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ username: "owner", groupId: group.id });
+    const member = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id, { title: "Katas" });
+    await shareWith(subject.id, owner.id, group.id);
+
+    signInAs(member);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Katas");
+    expect(text).toContain("Card 1 of 3");
+  });
+
+  it("marks group-sourced shares for an admin and offers no Remove for them", async () => {
+    const group = await createGroup("Karate club");
+    const admin = await createAdmin();
+    const owner = await createUser({ username: "owner", groupId: group.id });
+    const member = await createUser({ username: "member", groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareWith(subject.id, owner.id, group.id);
+    await shareSubject(subject.id, admin.id, "VIEWER");
+    expect(member.id).toBeTruthy();
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("member");
+    expect(text).toContain("via group");
+    expect(text).not.toContain("Remove");
   });
 });

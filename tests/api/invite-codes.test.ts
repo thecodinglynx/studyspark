@@ -8,6 +8,7 @@ import { signInAs } from "../helpers/auth";
 import {
   createAdmin,
   createFlashcardSubject,
+  createGroup,
   createInviteCode,
   createUser,
 } from "../helpers/factories";
@@ -546,5 +547,139 @@ describe("PATCH /api/admin/invite-codes/:id", () => {
       expect(first.status).toBe(201);
       expect(second.status).toBe(400);
     });
+  });
+});
+
+describe("invite code groups", () => {
+  async function setup() {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    return { admin, subject };
+  }
+
+  const groupOf = async (codeId: string) =>
+    (await prisma.inviteCode.findUniqueOrThrow({ where: { id: codeId }, include: { group: true } })).group;
+
+  it("creates a new group named after the code by default", async () => {
+    const { admin, subject } = await setup();
+
+    signInAs(admin);
+    const body = await json<CodeBody & { group: { id: string; name: string } | null }>(
+      await create({ subjectIds: [subject.id], code: "karateisfun" })
+    );
+
+    expect(body.group).toEqual({ id: expect.any(String), name: "KARATEISFUN" });
+    expect((await groupOf(body.id))?.name).toBe("KARATEISFUN");
+    expect(await prisma.group.count()).toBe(1);
+  });
+
+  it("names a generated code's group after the code", async () => {
+    const { admin, subject } = await setup();
+
+    signInAs(admin);
+    const body = await json<CodeBody & { group: { name: string } | null }>(
+      await create({ subjectIds: [subject.id] })
+    );
+
+    expect(body.group?.name).toBe(body.code);
+  });
+
+  it("puts the code in an existing group when one is chosen, without making another", async () => {
+    const { admin, subject } = await setup();
+    const group = await createGroup("Karate club");
+
+    signInAs(admin);
+    const body = await json<CodeBody & { group: { id: string } | null }>(
+      await create({ subjectIds: [subject.id], groupId: group.id })
+    );
+
+    expect(body.group?.id).toBe(group.id);
+    expect(await prisma.group.count()).toBe(1);
+  });
+
+  it("can make a code with no group", async () => {
+    const { admin, subject } = await setup();
+
+    signInAs(admin);
+    const body = await json<CodeBody & { group: unknown }>(
+      await create({ subjectIds: [subject.id], groupId: null })
+    );
+
+    expect(body.group).toBeNull();
+    expect(await prisma.group.count()).toBe(0);
+  });
+
+  it("refuses a group that does not exist and creates nothing", async () => {
+    const { admin, subject } = await setup();
+
+    signInAs(admin);
+    const response = await create({ subjectIds: [subject.id], groupId: "missing" });
+
+    expect(response.status).toBe(400);
+    expect((await json<{ error: string }>(response)).error).toContain("group does not exist");
+    expect(await prisma.inviteCode.count()).toBe(0);
+  });
+
+  it("reuses the group of the same name when a code is made again after being revoked", async () => {
+    const { admin, subject } = await setup();
+    signInAs(admin);
+    const first = await json<CodeBody>(await create({ subjectIds: [subject.id], code: "karateisfun" }));
+    const firstGroup = await groupOf(first.id);
+    await revoke(first.id);
+
+    const second = await json<CodeBody>(await create({ subjectIds: [subject.id], code: "karateisfun" }));
+
+    expect((await groupOf(second.id))?.id).toBe(firstGroup?.id);
+    expect(await prisma.group.count()).toBe(1);
+  });
+
+  it("changes a code's group, or removes it, without moving anyone", async () => {
+    const { admin, subject } = await setup();
+    const code = await createInviteCode(admin.id, [subject.id], { code: "KARATEISFUN" });
+    const group = await createGroup("Karate club");
+    const member = await createUser({ username: "member", groupId: group.id });
+
+    signInAs(admin);
+    expect((await json<CodeBody & { group: { id: string } }>(await edit(code.id, { groupId: group.id }))).group.id).toBe(
+      group.id
+    );
+    expect((await json<CodeBody & { group: unknown }>(await edit(code.id, { groupId: null }))).group).toBeNull();
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).groupId).toBe(group.id);
+  });
+
+  it("refuses to point a code at a group that does not exist", async () => {
+    const { admin, subject } = await setup();
+    const code = await createInviteCode(admin.id, [subject.id]);
+
+    signInAs(admin);
+
+    expect((await edit(code.id, { groupId: "missing" })).status).toBe(400);
+  });
+
+  it("leaves the group alone when an edit does not mention it", async () => {
+    const { admin, subject } = await setup();
+    const group = await createGroup("Karate club");
+    const code = await createInviteCode(admin.id, [subject.id]);
+    await prisma.inviteCode.update({ where: { id: code.id }, data: { groupId: group.id } });
+
+    signInAs(admin);
+    await edit(code.id, { role: "EDITOR" });
+
+    expect((await groupOf(code.id))?.id).toBe(group.id);
+  });
+
+  it("keeps the group when the code is revoked, so its members are not ungrouped", async () => {
+    const { admin, subject } = await setup();
+    const group = await createGroup("Karate club");
+    const member = await createUser({ username: "member", groupId: group.id });
+    const code = await createInviteCode(admin.id, [subject.id]);
+    await prisma.inviteCode.update({ where: { id: code.id }, data: { groupId: group.id } });
+
+    signInAs(admin);
+    await revoke(code.id);
+
+    expect(await prisma.group.count()).toBe(1);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).groupId).toBe(group.id);
   });
 });

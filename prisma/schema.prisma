@@ -17,6 +17,8 @@ model User {
   image            String?
   passwordHash     String
   role             UserRole          @default(USER)
+  groupId          String?
+  group            Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   accounts         Account[]
@@ -27,6 +29,8 @@ model User {
   subjects         Subject[]         @relation("SubjectOwner")
   sharedSubjects   SubjectShare[]
   inviteCodes      InviteCode[]
+
+  @@index([groupId])
 }
 
 model Subject {
@@ -46,6 +50,7 @@ model Subject {
   owner            User                @relation("SubjectOwner", fields: [ownerId], references: [id])
   shares           SubjectShare[]
   inviteCodes      InviteCodeSubject[]
+  groupShares      GroupSubject[]
 }
 
 model Card {
@@ -109,10 +114,15 @@ model SubjectShare {
   subjectId String
   userId    String
   createdAt DateTime  @default(now())
+  // Set when the share exists because the subject was shared with a group,
+  // so it can be removed again when the person leaves that group.
+  groupId   String?
   subject   Subject   @relation(fields: [subjectId], references: [id])
   user      User      @relation(fields: [userId], references: [id])
+  group     Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([subjectId, userId])
+  @@index([groupId])
 }
 
 model StudySession {
@@ -172,7 +182,10 @@ model InviteCode {
   usedCount   Int                 @default(0)
   createdById String
   createdAt   DateTime            @default(now())
+  // People who sign up with this code are added to this group.
+  groupId     String?
   createdBy   User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  group       Group?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
   subjects    InviteCodeSubject[]
 }
 
@@ -183,6 +196,32 @@ model InviteCodeSubject {
   subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@id([inviteCodeId, subjectId])
+  @@index([subjectId])
+}
+
+/// A set of people who can see each other, share subjects with each other
+/// and compare progress. A user belongs to at most one group.
+model Group {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  members     User[]
+  inviteCodes InviteCode[]
+  subjects    GroupSubject[]
+  shares      SubjectShare[]
+}
+
+/// A subject its owner has shared with their whole group.
+model GroupSubject {
+  groupId   String
+  subjectId String
+  role      ShareRole @default(VIEWER)
+  createdAt DateTime  @default(now())
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, subjectId])
   @@index([subjectId])
 }
 

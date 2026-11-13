@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -26,4 +27,17 @@ export async function checkAdmin(): Promise<AdminCheck> {
   }
 
   return { ok: true, userId: session.user.id };
+}
+
+/**
+ * For API routes: null when the caller is an admin, otherwise the 401 or 403
+ * response to send back.
+ */
+export async function denyUnlessAdmin(): Promise<NextResponse | null> {
+  const admin = await checkAdmin();
+  if (admin.ok) return null;
+  return NextResponse.json(
+    { error: admin.status === 401 ? "Unauthorized" : "Forbidden" },
+    { status: admin.status }
+  );
 }

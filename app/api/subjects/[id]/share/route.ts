@@ -61,6 +61,8 @@ export async function POST(
     },
     update: {
       role: parsed.data.role,
+      // A deliberate share is kept even if the person leaves a group.
+      groupId: null,
     },
     create: {
       subjectId: params.id,
