@@ -2,6 +2,7 @@ import { compare } from "bcryptjs";
 import { NextAuthOptions, getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
+import { shouldUseSecureCookies } from "./auth-cookies";
 import { z } from "zod";
 import type { JWT } from "next-auth/jwt";
 import type { Session, User } from "next-auth";
@@ -12,6 +13,8 @@ const credentialsSchema = z.object({
 });
 
 export const authOptions: NextAuthOptions = {
+  // Decided in one place so the proxy looks for the same cookie name.
+  useSecureCookies: shouldUseSecureCookies(),
   session: {
     strategy: "jwt",
   },
