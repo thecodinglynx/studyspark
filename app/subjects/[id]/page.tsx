@@ -11,6 +11,7 @@ import { SubjectStudy } from "@/components/subjects/subject-study";
 import { ChecklistStudy } from "@/components/subjects/checklist-study";
 import { ChecklistEditor } from "@/components/subjects/checklist-editor";
 import { CardEditor } from "@/components/subjects/card-editor";
+import { DeleteSubject } from "@/components/subjects/delete-subject";
 import { ShareManager } from "@/components/subjects/share-manager";
 import { checkAdmin } from "@/lib/admin";
 
@@ -379,6 +380,11 @@ export default async function SubjectPage(props: SubjectPageProps) {
                   </div>
                 )}
               </>
+            )}
+            {subject.ownerId === session.user.id && (
+              <div className="mt-10 border-t border-white/5 pt-8">
+                <DeleteSubject subjectId={subject.id} title={subject.title} />
+              </div>
             )}
           </Panel>
           <Panel className="h-fit bg-slate-900/70 p-6">

@@ -164,6 +164,54 @@ describe("flashcard subject page", () => {
     expect(await redirectTarget(() => open(subject.id))).toBe("/dashboard");
   });
 
+  it("lets the owner delete the subject", async () => {
+    const owner = await createUser();
+    const { subject } = await createFlashcardSubject(owner.id, { title: "Chemistry" });
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Delete this subject");
+    expect(text).toContain("Delete subject…");
+  });
+
+  it("lets the owner of a checklist delete it too", async () => {
+    const owner = await createUser();
+    const { subject } = await createChecklistSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Delete this subject");
+  });
+
+  it.each(["EDITOR", "VIEWER"] as const)(
+    "does not offer deletion to a %s",
+    async (role) => {
+      const owner = await createUser();
+      const collaborator = await createUser();
+      const { subject } = await createFlashcardSubject(owner.id);
+      await shareSubject(subject.id, collaborator.id, role);
+
+      signInAs(collaborator);
+      const { text } = await render(subject.id);
+
+      expect(text).not.toContain("Delete this subject");
+    }
+  );
+
+  it("does not offer deletion to an admin who only has access to the subject", async () => {
+    const owner = await createUser();
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(owner.id);
+    await shareSubject(subject.id, admin.id, "VIEWER");
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text).not.toContain("Delete this subject");
+  });
+
   it("shows the user's own totals, accuracy and session history", async () => {
     const owner = await createUser();
     const viewer = await createUser();
