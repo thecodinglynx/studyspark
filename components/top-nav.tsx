@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useEffect, useRef, useState, type SVGProps } from "react";
 import { Button } from "@/components/ui/button";
 
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session, status } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +51,15 @@ export function TopNav() {
   }, [isMenuOpen]);
 
   const closeMenu = () => setIsMenuOpen(false);
+
+  // Sign out without letting next-auth redirect. Its redirect target comes
+  // from the NEXTAUTH_URL setting, which sent people to a stale address when
+  // that setting was wrong. Navigating here always stays on the current site.
+  async function handleLogOut() {
+    await signOut({ redirect: false });
+    router.push("/");
+    router.refresh();
+  }
 
   const desktopNav = (
     <nav className="hidden items-center gap-6 text-sm sm:flex">
@@ -129,7 +139,7 @@ export function TopNav() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={handleLogOut}
               >
                 Log out
               </Button>

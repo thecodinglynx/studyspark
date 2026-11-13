@@ -6,7 +6,7 @@ import { TopNav } from "@/components/top-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
-import { auth, navigation } from "../helpers/browser";
+import { auth, navigation, router } from "../helpers/browser";
 
 describe("Button", () => {
   it("is a non-submitting button by default", () => {
@@ -153,7 +153,10 @@ describe("TopNav", () => {
     expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Log out" }));
-    expect(auth.signOut).toHaveBeenCalledWith({ callbackUrl: "/" });
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/"));
+    // next-auth must not do the redirect itself: it would use NEXTAUTH_URL.
+    expect(auth.signOut).toHaveBeenCalledWith({ redirect: false });
+    expect(router.refresh).toHaveBeenCalled();
   });
 
   it("shows the Admin link only to admins", () => {
