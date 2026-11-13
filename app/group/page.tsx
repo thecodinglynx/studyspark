@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TopNav } from "@/components/top-nav";
+import { SubjectGroupShare } from "@/components/subjects/share-with-group";
 import { Panel } from "@/components/ui/panel";
+import { checkAdmin } from "@/lib/admin";
 import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -46,6 +48,21 @@ export default async function GroupPage() {
     },
   });
   const group = me?.group;
+  const isAdmin = (await checkAdmin()).ok;
+
+  // The viewer's own subjects, so they can be shared with the group from here.
+  const ownSubjects = group
+    ? await prisma.subject.findMany({
+        where: { ownerId: session.user.id },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          groupShares: { where: { groupId: group.id }, select: { role: true } },
+        },
+        orderBy: { title: "asc" },
+      })
+    : [];
 
   return (
     <main className="min-h-screen">
@@ -71,6 +88,13 @@ export default async function GroupPage() {
               Once you are in a group, the people in it and the subjects they
               share with you will appear here.
             </p>
+            {isAdmin && (
+              <p className="mx-auto mt-3 max-w-md text-sm text-slate-400">
+                As an admin you can still share your own subjects with any group:
+                open a subject and choose a group under &ldquo;Share with a
+                group&rdquo;.
+              </p>
+            )}
             <Link
               href="/dashboard"
               className="mt-5 inline-flex rounded-full bg-blue-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-400"
@@ -122,9 +146,8 @@ export default async function GroupPage() {
                   Shared with the group
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  Subjects members have shared with everyone in the group. To
-                  share one of yours, open it and use &ldquo;Share with your
-                  group&rdquo;.
+                  Subjects members have shared with everyone in the group.
+                  You can share your own below.
                 </p>
                 {group.subjects.length === 0 ? (
                   <p className="mt-6 text-sm text-slate-500">
@@ -150,8 +173,8 @@ export default async function GroupPage() {
                           </div>
                           <p className="mt-1 text-sm text-slate-400">
                             {subject.type === "FLASHCARDS"
-                              ? `${subject._count.cards} cards`
-                              : `${subject._count.checklistItems} items`}
+                              ? `${subject._count.cards} ${subject._count.cards === 1 ? "card" : "cards"}`
+                              : `${subject._count.checklistItems} ${subject._count.checklistItems === 1 ? "item" : "items"}`}
                             {" · "}
                             {subject.ownerId === session.user.id
                               ? "Shared by you"
@@ -174,6 +197,44 @@ export default async function GroupPage() {
                 )}
               </Panel>
             </div>
+
+            <Panel className="bg-slate-900/70 p-6">
+              <h2 className="text-lg font-semibold text-white">
+                Share your subjects with {group.name}
+              </h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Everyone in the group can open a subject you share, including
+                people who join later. You can stop sharing at any time.
+              </p>
+              {ownSubjects.length === 0 ? (
+                <p className="mt-6 text-sm text-slate-500">
+                  You have no subjects yet.{" "}
+                  <Link href="/subjects/new" className="text-blue-300 hover:text-blue-200">
+                    Create one
+                  </Link>{" "}
+                  and you can share it here.
+                </p>
+              ) : (
+                <ul className="mt-6 flex flex-col gap-3">
+                  {ownSubjects.map((subject) => (
+                    <li key={subject.id}>
+                      <SubjectGroupShare
+                        subjectId={subject.id}
+                        title={subject.title}
+                        typeLabel={
+                          subject.type === "FLASHCARDS" ? "Flashcards" : "Checklist"
+                        }
+                        target={{
+                          id: group.id,
+                          name: group.name,
+                          currentRole: subject.groupShares[0]?.role ?? null,
+                        }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
           </>
         )}
       </section>

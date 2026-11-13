@@ -334,7 +334,7 @@ export function CreateSubjectForm() {
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCard(card.id, "prompt", event.target.value)
                     }
-                    required
+                    required={index === 0}
                   />
                   <TextArea
                     label="Answer"
@@ -344,7 +344,7 @@ export function CreateSubjectForm() {
                       updateCard(card.id, "answer", event.target.value)
                     }
                     rows={3}
-                    required
+                    required={index === 0}
                   />
                 </li>
               ))
@@ -375,7 +375,7 @@ export function CreateSubjectForm() {
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateItem(item.id, "title", event.target.value)
                     }
-                    required
+                    required={index === 0}
                   />
                   <TextArea
                     label="Notes (optional)"

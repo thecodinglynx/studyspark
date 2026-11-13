@@ -90,6 +90,14 @@ export default async function SubjectPage(props: SubjectPageProps) {
   // including owners, are not shown (or sent) the other users' names.
   const isAdmin = (await checkAdmin()).ok;
 
+  // Admins can share with any group, so they are offered all of them.
+  const allGroups = isAdmin
+    ? await prisma.group.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   // The group the viewer belongs to, if any, for sharing their own subjects.
   const viewerGroup = (
     await prisma.user.findUnique({
@@ -257,6 +265,25 @@ export default async function SubjectPage(props: SubjectPageProps) {
         }
       : null;
 
+  const isOwner = subject.ownerId === session.user.id;
+
+  // Who this subject can be shared with: an admin's choice of any group, or
+  // just the viewer's own group. The viewer's own group is listed first.
+  const shareTargets = (
+    isAdmin ? allGroups : viewerGroup ? [viewerGroup] : []
+  )
+    .map((group) => ({
+      id: group.id,
+      name: group.name,
+      currentRole:
+        subject.groupShares.find((entry) => entry.groupId === group.id)?.role ??
+        null,
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.id === viewerGroup?.id) - Number(a.id === viewerGroup?.id)
+    );
+
   return (
     <main className="min-h-screen">
       <TopNav />
@@ -349,6 +376,20 @@ export default async function SubjectPage(props: SubjectPageProps) {
           </Panel>
         </div>
 
+        {isOwner && (
+          <Panel className="bg-slate-900/70 p-6">
+            {shareTargets.length > 0 ? (
+              <ShareWithGroup
+                subjectId={subject.id}
+                targets={shareTargets}
+                ownGroupId={viewerGroup?.id ?? null}
+              />
+            ) : (
+              <NoGroupToShareWith isAdmin={isAdmin} />
+            )}
+          </Panel>
+        )}
+
         <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
           <Panel className="bg-slate-900/60 p-6">
             {subject.type === "FLASHCARDS" ? (
@@ -392,19 +433,6 @@ export default async function SubjectPage(props: SubjectPageProps) {
                   </div>
                 )}
               </>
-            )}
-            {subject.ownerId === session.user.id && viewerGroup && (
-              <div className="mt-10 border-t border-white/5 pt-8">
-                <ShareWithGroup
-                  subjectId={subject.id}
-                  groupName={viewerGroup.name}
-                  currentRole={
-                    subject.groupShares.find(
-                      (entry) => entry.groupId === viewerGroup.id
-                    )?.role ?? null
-                  }
-                />
-              </div>
             )}
             {subject.ownerId === session.user.id && (
               <div className="mt-10 border-t border-white/5 pt-8">
@@ -496,5 +524,29 @@ export default async function SubjectPage(props: SubjectPageProps) {
         </div>
       </section>
     </main>
+  );
+}
+
+/** Shown to an owner who has no group to share with, so the option is not simply missing. */
+function NoGroupToShareWith({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <section aria-labelledby="share-group-heading">
+      <h3 id="share-group-heading" className="text-lg font-semibold text-white">
+        Share with a group
+      </h3>
+      <p className="mt-2 text-sm text-slate-400">
+        {isAdmin ? (
+          <>
+            There are no groups yet. Create one in the Groups section of the{" "}
+            <Link href="/admin" className="text-blue-300 hover:text-blue-200">
+              Admin page
+            </Link>
+            , then you can share this subject with it.
+          </>
+        ) : (
+          "You are not in a group, so there is nobody to share this with yet. Groups are set up by an admin, and signing up with an invite code puts you in one."
+        )}
+      </p>
+    </section>
   );
 }

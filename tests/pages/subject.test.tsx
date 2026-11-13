@@ -371,14 +371,79 @@ describe("sharing a subject with a group", () => {
     expect(text).toContain("Share with your group");
   });
 
-  it("is not offered to an owner who is not in a group", async () => {
+  it("tells an owner who is not in a group why there is nobody to share with", async () => {
     const owner = await createUser();
     const { subject } = await createFlashcardSubject(owner.id);
 
     signInAs(owner);
     const { text } = await render(subject.id);
 
+    expect(text).toContain("Share with a group");
+    expect(text).toContain("You are not in a group, so there is nobody to share this with yet");
+    expect(text).toContain("signing up with an invite code puts you in one");
     expect(text).not.toContain("Share with your group");
+  });
+
+  it("offers an ordinary member only their own group, not other groups", async () => {
+    const group = await createGroup("Karate club");
+    await createGroup("Judo club");
+    const owner = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Share with Karate club");
+    expect(text).not.toContain("Judo club");
+  });
+
+  it("offers an admin every group to choose from, even one they are not in", async () => {
+    await createGroup("Karate club");
+    await createGroup("Judo club");
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text).toContain("Share with a group");
+    expect(text).toContain("Choose which groups can open this subject");
+    expect(text).toContain("Share with Karate club");
+    expect(text).toContain("Share with Judo club");
+  });
+
+  it("lists an admin's own group first", async () => {
+    await createGroup("Aikido");
+    const mine = await createGroup("Zen club");
+    const admin = await createUser({ username: "boss", role: "ADMIN", groupId: mine.id });
+    const { subject } = await createFlashcardSubject(admin.id);
+
+    signInAs(admin);
+    const { text } = await render(subject.id);
+
+    expect(text.indexOf("Share with Zen club")).toBeLessThan(text.indexOf("Share with Aikido"));
+  });
+
+  it("tells an admin when there are no groups to share with yet", async () => {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+
+    signInAs(admin);
+    const { text, html } = await render(subject.id);
+
+    expect(text).toContain("There are no groups yet");
+    expect(html).toContain('href="/admin"');
+  });
+
+  it("shows the control near the top of the page, not below the card editor", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ groupId: group.id });
+    const { subject } = await createFlashcardSubject(owner.id);
+
+    signInAs(owner);
+    const { text } = await render(subject.id);
+
+    expect(text.indexOf("Share with your group")).toBeLessThan(text.indexOf("Card manager"));
   });
 
   it("is not offered to group members who are not the owner, even editors", async () => {

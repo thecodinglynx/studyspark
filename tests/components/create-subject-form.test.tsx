@@ -221,3 +221,46 @@ describe("CreateSubjectForm", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 });
+
+describe("CreateSubjectForm required fields", () => {
+  it("only requires the first card, so an empty extra card does not block saving", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "subject-1" }, 201));
+    render(<CreateSubjectForm />);
+
+    const [firstPrompt, secondPrompt] = screen.getAllByLabelText("Prompt");
+    const [firstAnswer, secondAnswer] = screen.getAllByLabelText("Answer");
+    expect(firstPrompt).toBeRequired();
+    expect(firstAnswer).toBeRequired();
+    expect(secondPrompt).not.toBeRequired();
+    expect(secondAnswer).not.toBeRequired();
+
+    await user.type(screen.getByLabelText("Subject title"), "Chemistry");
+    await user.type(firstPrompt, "H");
+    await user.type(firstAnswer, "Hydrogen");
+    await user.click(save());
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).toMatchObject({
+      cards: [{ prompt: "H", answer: "Hydrogen" }],
+    });
+  });
+
+  it("only requires the first checklist item", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({ id: "subject-1" }, 201));
+    render(<CreateSubjectForm />);
+    await user.click(typeOption("Checklist"));
+
+    const [first, second] = screen.getAllByLabelText("Title");
+    expect(first).toBeRequired();
+    expect(second).not.toBeRequired();
+
+    await user.type(screen.getByLabelText("Subject title"), "Piano");
+    await user.type(first, "Scales");
+    await user.click(save());
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchCall(fetchMock).body).toMatchObject({ items: [{ title: "Scales" }] });
+  });
+});

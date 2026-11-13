@@ -8,13 +8,16 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const shareSchema = z.object({
   role: z.enum(["VIEWER", "EDITOR"]).default("VIEWER"),
+  // Which group to share with. Left out, it is the user's own group. Admins
+  // can name any group; everyone else can only name their own.
+  groupId: z.string().min(1).optional(),
 });
 
 /**
- * Finds the signed-in user's group, and checks they own the subject. Only the
- * owner can share a subject, and only with the group they belong to.
+ * Checks the signed-in user owns the subject and works out which group it is
+ * being shared with or unshared from.
  */
-async function ownerContext(subjectId: string) {
+async function ownerContext(subjectId: string, requestedGroupId?: string | null) {
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     return {
@@ -36,9 +39,37 @@ async function ownerContext(subjectId: string) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { group: { select: { id: true, name: true } } },
+    select: { role: true, group: { select: { id: true, name: true } } },
   });
-  if (!user?.group) {
+
+  let group: { id: string; name: string } | null = user?.group ?? null;
+
+  if (requestedGroupId && requestedGroupId !== user?.group?.id) {
+    if (user?.role !== "ADMIN") {
+      return {
+        ok: false as const,
+        response: NextResponse.json(
+          { error: "You can only share with your own group" },
+          { status: 403 }
+        ),
+      };
+    }
+    group = await prisma.group.findUnique({
+      where: { id: requestedGroupId },
+      select: { id: true, name: true },
+    });
+    if (!group) {
+      return {
+        ok: false as const,
+        response: NextResponse.json(
+          { error: "That group does not exist" },
+          { status: 400 }
+        ),
+      };
+    }
+  }
+
+  if (!group) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -52,15 +83,13 @@ async function ownerContext(subjectId: string) {
     ok: true as const,
     subjectId: subject.id,
     ownerId: session.user.id,
-    group: user.group,
+    group,
   };
 }
 
-/** Shares the subject with everyone in the owner's group, or changes the level. */
+/** Shares the subject with everyone in a group, or changes the level. */
 export async function PUT(request: Request, context: RouteContext) {
   const params = await context.params;
-  const found = await ownerContext(params.id);
-  if (!found.ok) return found.response;
 
   const body = await request.json().catch(() => ({}));
   const parsed = shareSchema.safeParse(body);
@@ -70,6 +99,9 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 400 }
     );
   }
+
+  const found = await ownerContext(params.id, parsed.data.groupId);
+  if (!found.ok) return found.response;
 
   await prisma.$transaction((tx) =>
     shareSubjectWithGroup(tx, {
@@ -83,14 +115,20 @@ export async function PUT(request: Request, context: RouteContext) {
   return NextResponse.json({
     shared: true,
     role: parsed.data.role,
+    groupId: found.group.id,
     groupName: found.group.name,
   });
 }
 
-/** Stops sharing the subject with the group. Direct shares are not affected. */
-export async function DELETE(_request: Request, context: RouteContext) {
+/**
+ * Stops sharing the subject with a group (given as ?groupId=, otherwise the
+ * user's own). Direct shares are not affected.
+ */
+export async function DELETE(request: Request, context: RouteContext) {
   const params = await context.params;
-  const found = await ownerContext(params.id);
+  const requestedGroupId = new URL(request.url).searchParams.get("groupId");
+
+  const found = await ownerContext(params.id, requestedGroupId);
   if (!found.ok) return found.response;
 
   await prisma.$transaction((tx) =>
@@ -100,5 +138,5 @@ export async function DELETE(_request: Request, context: RouteContext) {
     })
   );
 
-  return NextResponse.json({ shared: false });
+  return NextResponse.json({ shared: false, groupId: found.group.id });
 }

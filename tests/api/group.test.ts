@@ -107,13 +107,18 @@ describe("PUT /api/subjects/:id/group", () => {
   });
 
   it("shares the subject with every other member as a viewer by default", async () => {
-    const { owner, alice, bob, subject } = await setup();
+    const { group, owner, alice, bob, subject } = await setup();
 
     signInAs(owner);
     const response = await share(subject.id);
 
     expect(response.status).toBe(200);
-    expect(await json(response)).toEqual({ shared: true, role: "VIEWER", groupName: "Karate club" });
+    expect(await json(response)).toEqual({
+      shared: true,
+      role: "VIEWER",
+      groupId: group.id,
+      groupName: "Karate club",
+    });
 
     for (const member of [alice, bob]) {
       signInAs(member);
@@ -292,5 +297,121 @@ describe("DELETE /api/subjects/:id/group", () => {
     signOut();
 
     expect((await unshare(subject.id)).status).toBe(401);
+  });
+});
+
+describe("who may share with which group", () => {
+  const shareWith = (id: string, groupId: string, role?: "VIEWER" | "EDITOR") =>
+    share(id, { groupId, ...(role ? { role } : {}) });
+  const unshareFrom = (id: string, groupId: string) =>
+    DELETE(
+      request("DELETE", `/api/subjects/${id}/group?groupId=${encodeURIComponent(groupId)}`),
+      routeContext({ id })
+    );
+
+  it("lets an ordinary member share with their own group, naming it or not", async () => {
+    const { group, owner, alice, subject } = await setup();
+    signInAs(owner);
+
+    expect((await shareWith(subject.id, group.id)).status).toBe(200);
+
+    signInAs(alice);
+    expect((await read(subject.id)).status).toBe(200);
+  });
+
+  it("does not let an ordinary member share with a different group", async () => {
+    const { owner, subject } = await setup();
+    const other = await createGroup("Judo club");
+    const judoka = await createUser({ username: "judoka", groupId: other.id });
+    signInAs(owner);
+
+    const response = await shareWith(subject.id, other.id);
+
+    expect(response.status).toBe(403);
+    expect((await json<{ error: string }>(response)).error).toContain("your own group");
+    expect(await prisma.groupSubject.count()).toBe(0);
+    signInAs(judoka);
+    expect((await read(subject.id)).status).toBe(404);
+  });
+
+  it("does not let an ordinary member unshare from, or probe, a different group", async () => {
+    const { owner, subject } = await setup();
+    const other = await createGroup("Judo club");
+    signInAs(owner);
+
+    expect((await unshareFrom(subject.id, other.id)).status).toBe(403);
+  });
+
+  it("does not let an ordinary user with no group share at all, even if they name one", async () => {
+    const group = await createGroup("Karate club");
+    const loner = await createUser({ username: "loner" });
+    const { subject } = await createFlashcardSubject(loner.id);
+    signInAs(loner);
+
+    expect((await shareWith(subject.id, group.id)).status).toBe(403);
+    expect((await share(subject.id)).status).toBe(400);
+  });
+
+  it("lets an admin share their own subject with any group, without being a member", async () => {
+    const group = await createGroup("Karate club");
+    const member = await createUser({ username: "member", groupId: group.id });
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    signInAs(admin);
+
+    const response = await shareWith(subject.id, group.id, "EDITOR");
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({ shared: true, role: "EDITOR", groupName: "Karate club" });
+    signInAs(member);
+    expect((await read(subject.id)).status).toBe(200);
+    expect((await addCard(subject.id)).status).toBe(201);
+  });
+
+  it("lets an admin share one subject with several groups, and stop with just one", async () => {
+    const a = await createGroup("Karate club");
+    const b = await createGroup("Judo club");
+    const inA = await createUser({ username: "ina", groupId: a.id });
+    const inB = await createUser({ username: "inb", groupId: b.id });
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    signInAs(admin);
+    await shareWith(subject.id, a.id);
+    await shareWith(subject.id, b.id);
+
+    await unshareFrom(subject.id, a.id);
+
+    signInAs(inA);
+    expect((await read(subject.id)).status).toBe(404);
+    signInAs(inB);
+    expect((await read(subject.id)).status).toBe(200);
+  });
+
+  it("refuses an admin naming a group that does not exist", async () => {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    signInAs(admin);
+
+    const response = await shareWith(subject.id, "missing");
+
+    expect(response.status).toBe(400);
+    expect((await json<{ error: string }>(response)).error).toBe("That group does not exist");
+  });
+
+  it("does not let an admin share a subject they do not own", async () => {
+    const group = await createGroup("Karate club");
+    const owner = await createUser({ username: "owner" });
+    const { subject } = await createFlashcardSubject(owner.id);
+    signInAs(await createAdmin());
+
+    expect((await shareWith(subject.id, group.id)).status).toBe(403);
+  });
+
+  it("still needs a group named when an admin who is in none shares", async () => {
+    const admin = await createAdmin();
+    const { subject } = await createFlashcardSubject(admin.id);
+    signInAs(admin);
+
+    expect((await share(subject.id)).status).toBe(400);
   });
 });
