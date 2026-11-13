@@ -26,7 +26,7 @@ export function renderPage(element: ReactElement) {
     html,
     text,
     /** Data passed to a chart, as captured by the react-chartjs-2 mock. */
-    chart<T = unknown>(kind: "pie" | "bar"): T | null {
+    chart<T = unknown>(kind: "pie" | "bar" | "line"): T | null {
       const match = html.match(
         new RegExp(`data-chart="${kind}" data-json="([^"]*)"`)
       );

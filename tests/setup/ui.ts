@@ -27,6 +27,19 @@ vi.mock("@/lib/navigate", () => ({
   hardNavigate: (path: string) => hardNavigate(path),
 }));
 
+// Charts draw on a canvas, which jsdom does not have. Record the data they
+// were given instead, as data attributes the tests can read.
+vi.mock("react-chartjs-2", () => {
+  const chart = (kind: string) =>
+    function ChartStub({ data }: { data: unknown }) {
+      return createElement("div", {
+        "data-chart": kind,
+        "data-json": JSON.stringify(data),
+      });
+    };
+  return { Pie: chart("pie"), Bar: chart("bar"), Line: chart("line") };
+});
+
 // A plain anchor: the real component needs the App Router around it. The
 // prefetch setting is kept as a data attribute so tests can check it.
 vi.mock("next/link", () => ({

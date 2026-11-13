@@ -63,7 +63,7 @@ vi.mock("react-chartjs-2", () => {
         "data-json": JSON.stringify(data),
       });
     };
-  return { Pie: chart("pie"), Bar: chart("bar") };
+  return { Pie: chart("pie"), Bar: chart("bar"), Line: chart("line") };
 });
 
 // vitest.config.mts already vetted the URL; this is a last line of defence
