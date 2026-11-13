@@ -57,6 +57,25 @@ Use your browser's device toolbar (Chrome DevTools `Ctrl+Shift+M`) to preview di
 | `npm run prisma:generate` | Regenerate the Prisma client.                            |
 | `npm run prisma:deploy`   | Apply migrations in production.                          |
 
+## Admin and invite codes
+
+An admin can give new users access to chosen subjects at signup:
+
+1. Make an existing account an admin (see below), then log out and back in. An **Admin** link appears in the navigation.
+2. On the Admin page, tick one or more subjects (every subject from every user is listed), choose Viewer or Editor access, optionally set a maximum number of signups, and click **Generate code**. Leave the custom code blank to get a random 8-character code, or type your own (4 to 32 letters and numbers, such as `karateisfun`).
+3. Give the code to the new user. They enter it in the optional **Invite code** field when signing up and immediately have access to those subjects, shown as shared subjects on their dashboard.
+
+Codes are case-insensitive and stored in capitals; a custom code that is already taken is refused. A wrong, revoked or used-up code stops the signup and no account is created. Revoking a code stops further signups with it; people who already used it keep their access.
+
+Admins are made from the command line, because there is deliberately no way to become one from the website. The script talks to whichever database `DATABASE_URL` points at, so to promote an account on the live site run it with the production `DATABASE_URL`:
+
+```powershell
+npm run admin:grant -- <username>
+npm run admin:revoke -- <username>
+```
+
+The role is checked against the database on every admin request, so revoking it takes effect immediately.
+
 ## Testing
 
 ```powershell

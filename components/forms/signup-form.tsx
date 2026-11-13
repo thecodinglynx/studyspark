@@ -21,6 +21,7 @@ export function SignupForm() {
       username: formData.get("username")?.toString().trim() ?? "",
       password: formData.get("password")?.toString() ?? "",
       name: formData.get("name")?.toString().trim() || undefined,
+      inviteCode: formData.get("inviteCode")?.toString().trim() || undefined,
     };
 
     try {
@@ -74,6 +75,15 @@ export function SignupForm() {
         placeholder="••••••••"
         autoComplete="current-password"
         required
+      />
+      <Input
+        name="inviteCode"
+        label="Invite code (optional)"
+        placeholder="ABCD2345"
+        description="Got a code from an admin? Enter it to get access to their shared subjects."
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
       />
       {error && (
         <p className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">

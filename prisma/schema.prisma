@@ -16,6 +16,7 @@ model User {
   emailVerified    DateTime?
   image            String?
   passwordHash     String
+  role             UserRole          @default(USER)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   accounts         Account[]
@@ -25,24 +26,26 @@ model User {
   studySessions    StudySession[]
   subjects         Subject[]         @relation("SubjectOwner")
   sharedSubjects   SubjectShare[]
+  inviteCodes      InviteCode[]
 }
 
 model Subject {
-  id               String            @id @default(cuid())
+  id               String              @id @default(cuid())
   title            String
   description      String?
   ownerId          String
-  studyGoal        Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  type             SubjectType       @default(FLASHCARDS)
+  studyGoal        Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  type             SubjectType         @default(FLASHCARDS)
   cards            Card[]
   cardPerformances CardPerformance[]
   checklistEntries ChecklistEntry[]
   checklistItems   ChecklistItem[]
   sessions         StudySession[]
-  owner            User              @relation("SubjectOwner", fields: [ownerId], references: [id])
+  owner            User                @relation("SubjectOwner", fields: [ownerId], references: [id])
   shares           SubjectShare[]
+  inviteCodes      InviteCodeSubject[]
 }
 
 model Card {
@@ -157,6 +160,35 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+/// Created by an admin. Anyone who signs up with the code is given access to
+/// every subject linked to it, with the code's role.
+model InviteCode {
+  id          String              @id @default(cuid())
+  code        String              @unique
+  role        ShareRole           @default(VIEWER)
+  maxUses     Int?
+  usedCount   Int                 @default(0)
+  createdById String
+  createdAt   DateTime            @default(now())
+  createdBy   User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  subjects    InviteCodeSubject[]
+}
+
+model InviteCodeSubject {
+  inviteCodeId String
+  subjectId    String
+  inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([inviteCodeId, subjectId])
+  @@index([subjectId])
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 enum SubjectType {

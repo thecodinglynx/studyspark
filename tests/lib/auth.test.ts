@@ -5,7 +5,12 @@ import { createUser, TEST_PASSWORD } from "../helpers/factories";
 
 type Authorize = (
   credentials: Record<string, string> | undefined
-) => Promise<{ id: string; username: string; name?: string | null } | null>;
+) => Promise<{
+  id: string;
+  username: string;
+  name?: string | null;
+  role?: "USER" | "ADMIN";
+} | null>;
 
 // The credentials provider keeps the function we wrote under `options`.
 const provider = authOptions.providers[0] as unknown as {
@@ -24,7 +29,16 @@ describe("credentials login", () => {
       name: "Jane Doe",
       email: null,
       username: "jane",
+      role: "USER",
     });
+  });
+
+  it("reports the admin role for admin accounts", async () => {
+    await createUser({ username: "boss", role: "ADMIN" });
+
+    const result = await authorize({ username: "boss", password: TEST_PASSWORD });
+
+    expect(result?.role).toBe("ADMIN");
   });
 
   it("falls back to the username when the account has no name", async () => {
@@ -71,6 +85,19 @@ describe("session callbacks", () => {
     } as never);
 
     expect(token).toMatchObject({ id: "user-1", username: "jane" });
+  });
+
+  it("copies the role into the token and the session", async () => {
+    const token = await callbacks.jwt!({
+      token: {},
+      user: { id: "user-1", username: "boss", role: "ADMIN" },
+    } as never);
+    const session = (await callbacks.session!({
+      session: { user: { name: "Boss" }, expires: "2099-01-01" },
+      token,
+    } as never)) as Session;
+
+    expect(session.user.role).toBe("ADMIN");
   });
 
   it("leaves the token alone on later requests", async () => {

@@ -72,6 +72,7 @@ describe("SignupForm", () => {
     name?: string;
     username: string;
     password: string;
+    inviteCode?: string;
   }) {
     const user = userEvent.setup();
     render(<SignupForm />);
@@ -80,6 +81,9 @@ describe("SignupForm", () => {
     }
     await user.type(screen.getByLabelText("Username"), fields.username);
     await user.type(screen.getByLabelText("Password"), fields.password);
+    if (fields.inviteCode) {
+      await user.type(screen.getByLabelText(/Invite code/), fields.inviteCode);
+    }
     await user.click(screen.getByRole("button", { name: "Create account" }));
   }
 
@@ -110,6 +114,35 @@ describe("SignupForm", () => {
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchCall(fetchMock).body).toEqual({ username: "jane", password: "secret123" });
+  });
+
+  it("sends the invite code when one is entered", async () => {
+    const fetchMock = mockFetch(jsonResponse({ id: "user-1" }, 201));
+    auth.signIn.mockResolvedValue({ ok: true, error: null });
+
+    await fillAndSubmit({ username: "jane", password: "secret123", inviteCode: " ab12cd34 " });
+
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"));
+    expect(fetchCall(fetchMock).body).toEqual({
+      username: "jane",
+      password: "secret123",
+      inviteCode: "ab12cd34",
+    });
+  });
+
+  it("shows an invalid invite code error and does not sign in", async () => {
+    mockFetch(jsonResponse({ error: "Invalid or expired invite code" }, 400));
+
+    await fillAndSubmit({ username: "jane", password: "secret123", inviteCode: "WRONG234" });
+
+    expect(await screen.findByText("Invalid or expired invite code")).toBeInTheDocument();
+    expect(auth.signIn).not.toHaveBeenCalled();
+  });
+
+  it("marks the invite code field as optional", () => {
+    render(<SignupForm />);
+
+    expect(screen.getByLabelText(/Invite code \(optional\)/)).not.toBeRequired();
   });
 
   it("shows the server's error and does not sign in", async () => {

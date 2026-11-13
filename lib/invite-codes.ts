@@ -1,0 +1,19 @@
+import { randomInt } from "node:crypto";
+
+// Uppercase letters and digits, minus the ones that are easy to misread when a
+// code is read aloud or copied by hand: I, O, 0 and 1.
+export const INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const INVITE_CODE_LENGTH = 8;
+
+export function generateInviteCode(length = INVITE_CODE_LENGTH): string {
+  let code = "";
+  for (let index = 0; index < length; index += 1) {
+    code += INVITE_CODE_ALPHABET[randomInt(INVITE_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+/** Codes are case-insensitive, and people paste them with stray spaces. */
+export function normalizeInviteCode(input: string): string {
+  return input.trim().toUpperCase();
+}

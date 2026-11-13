@@ -12,7 +12,11 @@ export const TEST_PASSWORD = "correct-horse";
 const TEST_PASSWORD_HASH = hashSync(TEST_PASSWORD, 4);
 
 export async function createUser(
-  overrides: { username?: string; name?: string | null } = {}
+  overrides: {
+    username?: string;
+    name?: string | null;
+    role?: "USER" | "ADMIN";
+  } = {}
 ) {
   const n = next();
   return prisma.user.create({
@@ -20,6 +24,35 @@ export async function createUser(
       username: overrides.username ?? `user${n}`,
       name: overrides.name === undefined ? `User ${n}` : overrides.name,
       passwordHash: TEST_PASSWORD_HASH,
+      ...(overrides.role ? { role: overrides.role } : {}),
+    },
+  });
+}
+
+export function createAdmin(overrides: { username?: string } = {}) {
+  return createUser({ username: overrides.username ?? "admin", role: "ADMIN" });
+}
+
+export async function createInviteCode(
+  createdById: string,
+  subjectIds: string[],
+  options: {
+    code?: string;
+    role?: "VIEWER" | "EDITOR";
+    maxUses?: number | null;
+    usedCount?: number;
+  } = {}
+) {
+  return prisma.inviteCode.create({
+    data: {
+      code: options.code ?? `CODE${next()}ABC`.slice(0, 8).toUpperCase(),
+      role: options.role ?? "VIEWER",
+      maxUses: options.maxUses ?? null,
+      usedCount: options.usedCount ?? 0,
+      createdById,
+      subjects: {
+        createMany: { data: subjectIds.map((subjectId) => ({ subjectId })) },
+      },
     },
   });
 }

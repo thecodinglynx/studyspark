@@ -156,6 +156,23 @@ describe("TopNav", () => {
     expect(auth.signOut).toHaveBeenCalledWith({ callbackUrl: "/" });
   });
 
+  it("shows the Admin link only to admins", () => {
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-1", username: "jane" } },
+    };
+    const { unmount } = render(<TopNav />);
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
+    unmount();
+
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-2", username: "boss", role: "ADMIN" } },
+    };
+    render(<TopNav />);
+    expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin");
+  });
+
   it("shows neither sign-in nor log out while the session is loading", () => {
     auth.session = { status: "loading", data: null };
     render(<TopNav />);

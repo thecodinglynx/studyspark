@@ -32,6 +32,7 @@ export const authOptions: NextAuthOptions = {
         name?: string | null;
         email?: string | null;
         username: string;
+        role: "USER" | "ADMIN";
       } | null> {
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) {
@@ -51,6 +52,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name ?? user.username,
           email: user.email ?? null,
           username: user.username,
+          role: user.role,
         };
       },
     }),
@@ -66,6 +68,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.username = user.username ?? user.name ?? null;
+        token.role = user.role;
       }
       return token;
     },
@@ -79,6 +82,9 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.username = token.username as string;
+        // Only used to show or hide the Admin link. Every admin action checks
+        // the role in the database again (see lib/admin.ts).
+        session.user.role = (token.role as "USER" | "ADMIN") ?? "USER";
       }
       return session;
     },

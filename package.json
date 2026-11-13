@@ -15,7 +15,9 @@
     "prisma:deploy": "prisma migrate deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "admin:grant": "node --env-file=.env scripts/set-admin.mjs grant",
+    "admin:revoke": "node --env-file=.env scripts/set-admin.mjs revoke"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.1",

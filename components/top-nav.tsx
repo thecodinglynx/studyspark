@@ -16,6 +16,9 @@ export function TopNav() {
   if (status === "authenticated") {
     links.push({ href: "/analytics", label: "Analytics" });
     links.push({ href: "/subjects/new", label: "Create subject" });
+    if (session?.user?.role === "ADMIN") {
+      links.push({ href: "/admin", label: "Admin" });
+    }
   }
 
   useEffect(() => {

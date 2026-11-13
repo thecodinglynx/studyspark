@@ -21,7 +21,10 @@ export const navigation = { pathname: "/" };
 type SessionState =
   | { status: "loading"; data: null }
   | { status: "unauthenticated"; data: null }
-  | { status: "authenticated"; data: { user: { id: string; username: string } } };
+  | {
+      status: "authenticated";
+      data: { user: { id: string; username: string; role?: "USER" | "ADMIN" } };
+    };
 
 export const auth: {
   session: SessionState;
