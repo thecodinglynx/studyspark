@@ -15,7 +15,7 @@ export function TopNav() {
   const links = [{ href: "/dashboard", label: "Dashboard" }];
 
   if (status === "authenticated") {
-    links.push({ href: "/analytics", label: "Analytics" });
+    links.push({ href: "/progress", label: "Progress" });
     links.push({ href: "/subjects/new", label: "Create subject" });
     if (session?.user?.groupName) {
       links.push({ href: "/group", label: "Group" });

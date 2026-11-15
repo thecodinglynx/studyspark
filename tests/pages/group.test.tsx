@@ -82,14 +82,14 @@ describe("group page", () => {
     expect(html).not.toContain("passwordHash");
   });
 
-  it("links to the comparison on the analytics page", async () => {
+  it("links to the comparison on the progress page", async () => {
     const group = await createGroup("Karate club");
     signInAs(await createUser({ groupId: group.id }));
 
     const { html, text } = await render();
 
     expect(text).toContain("See how you compare");
-    expect(html).toContain('href="/analytics"');
+    expect(html).toContain('href="/progress"');
   });
 
   describe("shared subjects", () => {

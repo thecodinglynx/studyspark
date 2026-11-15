@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth";
 import { AnalyticsView } from "@/components/analytics/analytics-view";
 
-export default async function AnalyticsPage() {
+export default async function ProgressPage() {
   const session = await getCurrentSession();
 
   if (!session?.user?.id) {

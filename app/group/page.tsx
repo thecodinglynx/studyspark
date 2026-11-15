@@ -134,7 +134,7 @@ export default async function GroupPage() {
                   ))}
                 </ul>
                 <Link
-                  href="/analytics"
+                  href="/progress"
                   className="mt-5 inline-flex text-sm font-medium text-blue-300 transition hover:text-blue-200"
                 >
                   See how you compare →

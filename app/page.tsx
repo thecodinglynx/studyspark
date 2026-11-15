@@ -18,7 +18,7 @@ const features = [
   {
     title: "Progress that powers you",
     description:
-      "Detailed analytics show accuracy trends, streaks, and goal completion.",
+      "Detailed progress charts show accuracy trends, streaks, and goal completion.",
   },
 ];
 
@@ -40,7 +40,7 @@ export default async function LandingPage() {
           A beautiful study companion built for teams and ambitious learners.
         </h1>
         <p className="max-w-2xl text-base text-slate-300 sm:text-lg">
-          StudySpark combines collaborative flashcard decks, rich analytics, and
+          StudySpark combines collaborative flashcard decks, rich progress tracking, and
           a delightful experience so you can stay on track and celebrate wins
           with your peers.
         </p>

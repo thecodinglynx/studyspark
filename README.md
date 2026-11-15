@@ -87,7 +87,7 @@ A group is a set of people who study together. A person is in at most one group.
 - **Seeing each other:** members of a group can see who else is in it on the **Group** page (shown in the navigation for people in a group). Nobody can see another group or people outside their own.
 - **Sharing subjects:** the owner of a subject can use **Share with your group** on the subject page to let everyone in their group open it as a viewer or an editor, including people who join later, and can stop sharing at any time. Subjects a member shares appear on every member's dashboard and on the Group page.
 - **Leaving a group:** a person who is moved out loses the access the group gave them, and their own subjects stop being shared with that group. Access an owner or admin gave them directly is kept.
-- **Comparing progress:** the Analytics page has a group section with group totals (who studied this week, study time, accuracy), a table comparing every member (streak, days studied, study time, accuracy, last studied) and a comparison for each subject shared with the group. Only totals are shown, never anyone's individual answers.
+- **Comparing progress:** the Progress page has a **Group** tab with group totals (who studied this week, study time, accuracy), a table comparing every member (streak, days studied, study time, accuracy, last studied) and a comparison for each subject shared with the group. Only totals are shown, never anyone's individual answers.
 
 Group sharing works by giving each member an ordinary access record for the subject, tagged with the group it came from, so every existing permission check works unchanged. See `lib/groups.ts`.
 

@@ -109,10 +109,10 @@ export async function AnalyticsView({ userId }: AnalyticsViewProps) {
       <section className="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-24 pt-16">
         <header>
           <p className="text-sm uppercase tracking-[0.4em] text-blue-300/80">
-            Analytics
+            Progress
           </p>
           <h1 className="mt-2 text-4xl font-semibold text-white">
-            Learning progress
+            How your studying is going
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-300">
             See whether you are improving, how consistent you have been, and

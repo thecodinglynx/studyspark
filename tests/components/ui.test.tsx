@@ -126,7 +126,7 @@ describe("TopNav", () => {
     render(<TopNav />);
 
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Analytics" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Progress" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Create subject" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -142,9 +142,9 @@ describe("TopNav", () => {
     render(<TopNav />);
 
     expect(screen.getByText("jane")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Analytics" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Progress" })).toHaveAttribute(
       "href",
-      "/analytics"
+      "/progress"
     );
     expect(screen.getByRole("link", { name: "Create subject" })).toHaveAttribute(
       "href",
@@ -233,10 +233,10 @@ describe("TopNav", () => {
       status: "authenticated",
       data: { user: { id: "user-1", username: "jane" } },
     };
-    navigation.pathname = "/analytics";
+    navigation.pathname = "/progress";
     render(<TopNav />);
 
-    expect(screen.getByRole("link", { name: "Analytics" }).className).toContain("text-white");
+    expect(screen.getByRole("link", { name: "Progress" }).className).toContain("text-white");
     expect(screen.getByRole("link", { name: "Dashboard" }).className).toContain(
       "text-slate-400"
     );

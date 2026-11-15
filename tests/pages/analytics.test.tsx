@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import AnalyticsPage from "@/app/analytics/page";
+import ProgressPage from "@/app/progress/page";
 import { AnalyticsView } from "@/components/analytics/analytics-view";
 import { prisma } from "@/lib/prisma";
 import {
@@ -39,7 +39,7 @@ async function recordCard(
 
 describe("analytics page", () => {
   it("sends anonymous visitors to the login page", async () => {
-    expect(await redirectTarget(() => AnalyticsPage())).toBe("/login");
+    expect(await redirectTarget(() => ProgressPage())).toBe("/login");
   });
 
   it("invites a user with no subjects to get started", async () => {
