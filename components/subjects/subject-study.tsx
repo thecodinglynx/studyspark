@@ -109,6 +109,13 @@ export function SubjectStudy({
     }
     previousSignatureRef.current = cardsSignature;
 
+    // Saving a run refreshes the page, which changes the card stats. Do not
+    // throw away the finished screen when that happens; "Start new run" picks
+    // up the latest cards itself.
+    if (completed) {
+      return;
+    }
+
     if (cards.length === 0) {
       if (sessionSize !== 0) {
         setSessionSize(0);
@@ -128,7 +135,7 @@ export function SubjectStudy({
     }
 
     resetForNewRun(normalizedSize);
-  }, [cardsSignature, sessionSize, cards.length, resetForNewRun]);
+  }, [cardsSignature, sessionSize, cards.length, completed, resetForNewRun]);
 
   const hasActiveProgress =
     !completed && (correctCount > 0 || incorrectCount > 0);
@@ -481,15 +488,9 @@ export function SubjectStudy({
         >
           Mark correct
         </Button>
-        {completed && (
-          <Button
-            type="button"
-            size="lg"
-            loading={saving}
-            onClick={saveSession}
-            disabled={sessionSaved}
-          >
-            {sessionSaved ? "Session saved" : error ? "Try saving again" : "Save session"}
+        {completed && error && !sessionSaved && (
+          <Button type="button" size="lg" loading={saving} onClick={saveSession}>
+            Try saving again
           </Button>
         )}
         {completed && (

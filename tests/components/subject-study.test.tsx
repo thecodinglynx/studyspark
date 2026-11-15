@@ -171,7 +171,7 @@ describe("SubjectStudy saving", () => {
         { cardId: "card-3", correct: 1, incorrect: 0 },
       ],
     });
-    expect(button("Session saved")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^(save session|session saved)$/i })).not.toBeInTheDocument();
     expect(router.refresh).toHaveBeenCalled();
   });
 
@@ -362,5 +362,31 @@ describe("SubjectStudy repeat missed cards", () => {
         { cardId: "card-2", correct: 1, incorrect: 0 },
       ],
     });
+  });
+});
+
+describe("SubjectStudy finished screen", () => {
+  it("stays on the congratulations screen after the page refreshes with new stats", async () => {
+    const user = userEvent.setup();
+    const cards = makeCards(2);
+    const view = renderStudy(cards);
+
+    await user.click(button("Mark correct"));
+    await user.click(button("Mark correct"));
+    await screen.findByText(/Session saved automatically/);
+
+    // router.refresh() hands the component the same cards with updated stats.
+    const updated = cards.map((card) => ({
+      ...card,
+      stats: { correctCount: 1, incorrectCount: 0, lastStudiedAt: null },
+    }));
+    view.rerender(<SubjectStudy subjectId="subject-1" cards={updated} studyGoal={0} />);
+
+    expect(heading()).toHaveTextContent("Session complete");
+    expect(screen.getByText("Great work!")).toBeInTheDocument();
+    expect(screen.getByText(/Session saved automatically/)).toBeInTheDocument();
+
+    await user.click(button("Start new run"));
+    expect(heading()).toHaveTextContent("Card 1 of 2");
   });
 });
