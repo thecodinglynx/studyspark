@@ -12,7 +12,7 @@ const credentialsSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-/** How often a signed-in user's role and group are looked up again. */
+/** How often a signed-in user's name, role and group are looked up again. */
 const PROFILE_REFRESH_MS = 60_000;
 
 export const authOptions: NextAuthOptions = {
@@ -67,9 +67,11 @@ export const authOptions: NextAuthOptions = {
     async jwt({
       token,
       user,
+      trigger,
     }: {
       token: JWT;
       user?: User | null;
+      trigger?: "signIn" | "signUp" | "update";
     }): Promise<JWT> {
       if (user) {
         token.id = user.id;
@@ -82,14 +84,16 @@ export const authOptions: NextAuthOptions = {
       // only feeds the navigation; every real permission check reads the
       // database itself.
       const stale =
+        trigger === "update" ||
         !token.profileCheckedAt ||
         Date.now() - token.profileCheckedAt > PROFILE_REFRESH_MS;
       if (token.id && (user || stale)) {
         const fresh = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { role: true, group: { select: { name: true } } },
+          select: { name: true, role: true, group: { select: { name: true } } },
         });
         if (fresh) {
+          token.name = fresh.name ?? token.username ?? null;
           token.role = fresh.role;
           token.groupName = fresh.group?.name ?? null;
         }
@@ -107,6 +111,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.username = token.username as string;
+        session.user.name = (token.name as string | null | undefined) ?? token.username ?? null;
         session.user.groupName = token.groupName ?? null;
         // Only used to show or hide the Admin link. Every admin action checks
         // the role in the database again (see lib/admin.ts).

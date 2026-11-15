@@ -139,9 +139,16 @@ export function TopNav() {
           )}
           {status === "authenticated" && session.user && (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-300">
-                {session.user.username}
-              </span>
+              <Link
+                href="/settings"
+                prefetch={false}
+                title="Your profile and settings"
+                className={`max-w-[10rem] truncate text-sm transition hover:text-white ${
+                  pathname?.startsWith("/settings") ? "text-white" : "text-slate-300"
+                }`}
+              >
+                {session.user.name?.trim() || session.user.username}
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"

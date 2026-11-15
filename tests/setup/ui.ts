@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next-auth/react", () => ({
-  useSession: () => auth.session,
+  useSession: () => ({ ...auth.session, update: (...args: unknown[]) => auth.update(...args) }),
   signIn: (...args: unknown[]) => auth.signIn(...args),
   signOut: (...args: unknown[]) => auth.signOut(...args),
   SessionProvider: ({ children }: { children: ReactNode }) => children,

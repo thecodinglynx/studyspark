@@ -30,6 +30,7 @@ type SessionState =
         user: {
           id: string;
           username: string;
+          name?: string | null;
           role?: "USER" | "ADMIN";
           groupName?: string | null;
         };
@@ -40,10 +41,12 @@ export const auth: {
   session: SessionState;
   signIn: Mock<AnyFunction>;
   signOut: Mock<AnyFunction>;
+  update: Mock<AnyFunction>;
 } = {
   session: { status: "unauthenticated", data: null },
   signIn: vi.fn<AnyFunction>(),
   signOut: vi.fn<AnyFunction>(),
+  update: vi.fn<AnyFunction>(),
 };
 
 export function resetBrowserFakes() {
@@ -53,6 +56,7 @@ export function resetBrowserFakes() {
   auth.session = { status: "unauthenticated", data: null };
   auth.signIn.mockReset();
   auth.signOut.mockReset();
+  auth.update.mockReset();
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {

@@ -158,6 +158,23 @@ describe("TopNav", () => {
     expect(auth.signOut).toHaveBeenCalledWith({ redirect: false });
   });
 
+  it("shows the person's name as a link to their settings, falling back to the username", () => {
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-1", username: "jane", name: "Jane Learner" } },
+    };
+    const { unmount } = render(<TopNav />);
+    expect(screen.getByRole("link", { name: "Jane Learner" })).toHaveAttribute("href", "/settings");
+    unmount();
+
+    auth.session = {
+      status: "authenticated",
+      data: { user: { id: "user-1", username: "jane", name: null } },
+    };
+    render(<TopNav />);
+    expect(screen.getByRole("link", { name: "jane" })).toHaveAttribute("href", "/settings");
+  });
+
   it("does not prefetch any navigation link, so logged-out redirects are never cached", () => {
     render(<TopNav />);
 
