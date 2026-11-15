@@ -78,6 +78,9 @@ export function SubjectStudy({
     [cards]
   );
   const previousSignatureRef = useRef<string | null>(null);
+  // A finished run is saved once on its own. If that fails, the Save button
+  // stays so it can be retried by hand rather than looping.
+  const autoSaveTriedRef = useRef(false);
 
   const resetForNewRun = useCallback(
     (desiredCount: number = sessionSize) => {
@@ -89,6 +92,7 @@ export function SubjectStudy({
       setCompleted(false);
       setStartedAt(new Date());
       setSessionSaved(false);
+      autoSaveTriedRef.current = false;
       setCardTallies({});
       return size;
     },
@@ -237,6 +241,7 @@ export function SubjectStudy({
   }
 
   async function saveSession() {
+    autoSaveTriedRef.current = true;
     setSaving(true);
     setError(null);
 
@@ -278,6 +283,15 @@ export function SubjectStudy({
       setSaving(false);
     }
   }
+
+  // Save the run as soon as the last card is answered, however big the run was.
+  useEffect(() => {
+    if (completed && !sessionSaved && !saving && !autoSaveTriedRef.current) {
+      void saveSession();
+    }
+    // saveSession reads the latest state each render; only the finish matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completed]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -423,8 +437,12 @@ export function SubjectStudy({
           <p className="mt-2 text-sm">
             You completed {cardsCompleted}{" "}
             {cardsCompleted === 1 ? "card" : "cards"} this run ({correctCount}{" "}
-            correct, {incorrectCount} incorrect). Save the session to update
-            your stats.
+            correct, {incorrectCount} incorrect).{" "}
+            {sessionSaved
+              ? "Your stats are updated."
+              : saving
+              ? "Saving your session…"
+              : "Your session could not be saved yet. Try saving it again."}
           </p>
           {studyGoal > 0 && (
             <p className="mt-2 text-sm">
@@ -433,7 +451,7 @@ export function SubjectStudy({
           )}
           {sessionSaved && (
             <p className="mt-3 text-sm text-emerald-100">
-              Session saved! Start a new run whenever you&apos;re ready.
+              Session saved automatically. Start a new run whenever you&apos;re ready.
             </p>
           )}
         </div>
@@ -471,7 +489,7 @@ export function SubjectStudy({
             onClick={saveSession}
             disabled={sessionSaved}
           >
-            {sessionSaved ? "Session saved" : "Save session"}
+            {sessionSaved ? "Session saved" : error ? "Try saving again" : "Save session"}
           </Button>
         )}
         {completed && (

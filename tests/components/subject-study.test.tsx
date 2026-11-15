@@ -25,6 +25,9 @@ const button = (name: string | RegExp) => screen.getByRole("button", { name });
 const heading = () => screen.getByRole("heading", { level: 2 });
 
 beforeEach(() => {
+  // A finished run saves itself, so tests get a working endpoint unless they
+  // install their own.
+  mockFetch(jsonResponse({ id: "session-1" }, 201));
   // With every roll at 0 the weighted draw always takes the first remaining
   // card, so cards come up in the order they were given.
   vi.spyOn(Math, "random").mockReturnValue(0);
@@ -95,7 +98,7 @@ describe("SubjectStudy run", () => {
     ).toBeInTheDocument();
     expect(button("Mark correct")).toBeDisabled();
     expect(button("Mark incorrect")).toBeDisabled();
-    expect(button("Save session")).toBeEnabled();
+    expect(await screen.findByText(/Session saved automatically/)).toBeInTheDocument();
     expect(button("Start new run")).toBeEnabled();
   });
 
@@ -137,22 +140,22 @@ describe("SubjectStudy run", () => {
     expect(heading()).toHaveTextContent("Card 1 of 2");
     expect(screen.getByText("0 correct")).toBeInTheDocument();
     expect(screen.queryByText("Great work!")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save session" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
   });
 });
 
 describe("SubjectStudy saving", () => {
-  it("posts the totals and per-card tallies, then confirms", async () => {
+  it("saves the run by itself when the last card is answered, then confirms", async () => {
     const user = userEvent.setup();
     const fetchMock = mockFetch(jsonResponse({ id: "session-1" }, 201));
     renderStudy(makeCards(3));
 
     await user.click(button("Mark correct"));
     await user.click(button("Mark incorrect"));
+    expect(fetchMock).not.toHaveBeenCalled();
     await user.click(button("Mark correct"));
-    await user.click(button("Save session"));
 
-    expect(await screen.findByText(/Session saved! Start a new run/)).toBeInTheDocument();
+    expect(await screen.findByText(/Session saved automatically/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const call = fetchCall(fetchMock);
     expect(call.url).toBe("/api/subjects/subject-1/sessions");
@@ -172,6 +175,33 @@ describe("SubjectStudy saving", () => {
     expect(router.refresh).toHaveBeenCalled();
   });
 
+  it("saves a run of just one card", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({}, 201));
+    renderStudy(makeCards(1));
+
+    await user.click(button("Mark correct"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchCall(fetchMock).body).toMatchObject({ correct: 1, cardCount: 1 });
+  });
+
+  it("saves each run once, including after starting a new run", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(jsonResponse({}, 201), jsonResponse({}, 201));
+    renderStudy(makeCards(1));
+
+    await user.click(button("Mark correct"));
+    await screen.findByText(/Session saved automatically/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await user.click(button("Start new run"));
+    await user.click(button("Mark incorrect"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchCall(fetchMock, 1).body).toMatchObject({ correct: 0, incorrect: 1 });
+  });
+
   it("rounds the elapsed time to minutes", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
@@ -182,7 +212,6 @@ describe("SubjectStudy saving", () => {
 
       vi.setSystemTime(new Date("2025-01-01T10:07:20Z"));
       await user.click(button("Mark correct"));
-      await user.click(button("Save session"));
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       expect(fetchCall(fetchMock).body.durationMin).toBe(7);
@@ -191,24 +220,25 @@ describe("SubjectStudy saving", () => {
     }
   });
 
-  it("shows the server's error and lets the user retry", async () => {
+  it("shows the server's error, does not loop, and lets the user retry", async () => {
     const user = userEvent.setup();
     const fetchMock = mockFetch(
       jsonResponse({ error: "Mismatched card totals" }, 400),
       jsonResponse({}, 201)
     );
     renderStudy(makeCards(1));
+
     await user.click(button("Mark correct"));
 
-    await user.click(button("Save session"));
-
     expect(await screen.findByText("Mismatched card totals")).toBeInTheDocument();
-    expect(screen.queryByText(/Session saved!/)).not.toBeInTheDocument();
+    expect(screen.getByText(/could not be saved yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/Session saved automatically/)).not.toBeInTheDocument();
     expect(router.refresh).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await user.click(button("Save session"));
+    await user.click(button("Try saving again"));
 
-    expect(await screen.findByText(/Session saved!/)).toBeInTheDocument();
+    expect(await screen.findByText(/Session saved automatically/)).toBeInTheDocument();
     expect(screen.queryByText("Mismatched card totals")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // The retry must send the same results, not an emptied tally.
@@ -219,11 +249,11 @@ describe("SubjectStudy saving", () => {
     const user = userEvent.setup();
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network down")));
     renderStudy(makeCards(1));
+
     await user.click(button("Mark correct"));
 
-    await user.click(button("Save session"));
-
     expect(await screen.findByText("Network down")).toBeInTheDocument();
+    expect(button("Try saving again")).toBeEnabled();
   });
 });
 
@@ -322,7 +352,6 @@ describe("SubjectStudy repeat missed cards", () => {
 
     expect(heading()).toHaveTextContent("Session complete");
 
-    await user.click(button("Save session"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchCall(fetchMock).body).toMatchObject({
       correct: 2,
