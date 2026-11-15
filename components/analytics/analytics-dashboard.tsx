@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { AnalyticsTabs } from "@/components/analytics/analytics-tabs";
 import { AccuracyLineChart } from "@/components/analytics/charts/accuracy-line-chart";
 import { PracticeBarChart } from "@/components/analytics/charts/practice-bar-chart";
 import {
@@ -120,8 +121,9 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   }, [data, timeZone]);
 
   const { summary } = view;
+  const [tab, setTab] = useState("you");
 
-  return (
+  const individual = (
     <div className="flex flex-col gap-12">
       {summary.hasAnyActivity ? (
         <section
@@ -174,28 +176,6 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         </Panel>
       )}
 
-      <Panel className="bg-slate-900/70 p-6">
-        <h2 className="text-lg font-semibold text-white">
-          Where to focus next
-        </h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Your subjects, starting with the ones you have studied least
-          recently. A subject is flagged after {NEGLECTED_AFTER_DAYS} days
-          without practice.
-        </p>
-        {view.progress.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-500">
-            You have no subjects yet.
-          </p>
-        ) : (
-          <ul className="mt-6 flex flex-col gap-4">
-            {view.progress.map((subject) => (
-              <SubjectRow key={subject.id} subject={subject} />
-            ))}
-          </ul>
-        )}
-      </Panel>
-
       {summary.hasAnyActivity && (
         <div className="grid gap-8 lg:grid-cols-2">
           <Panel className="bg-slate-900/70 p-6">
@@ -236,9 +216,27 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         </div>
       )}
 
-      {data.group && (
-        <GroupAnalytics group={data.group} now={data.now} timeZone={timeZone} />
-      )}
+      <Panel className="bg-slate-900/70 p-6">
+        <h2 className="text-lg font-semibold text-white">
+          Where to focus next
+        </h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Your subjects, starting with the ones you have studied least
+          recently. A subject is flagged after {NEGLECTED_AFTER_DAYS} days
+          without practice.
+        </p>
+        {view.progress.length === 0 ? (
+          <p className="mt-6 text-sm text-slate-500">
+            You have no subjects yet.
+          </p>
+        ) : (
+          <ul className="mt-6 flex flex-col gap-4">
+            {view.progress.map((subject) => (
+              <SubjectRow key={subject.id} subject={subject} />
+            ))}
+          </ul>
+        )}
+      </Panel>
 
       {view.review.length > 0 && (
         <Panel className="bg-slate-900/70 p-6">
@@ -334,6 +332,26 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         </Panel>
       )}
     </div>
+  );
+
+  if (!data.group) return individual;
+
+  return (
+    <AnalyticsTabs
+      active={tab}
+      onChange={setTab}
+      tabs={[
+        { id: "you", label: "You", hint: "Your own progress", panel: individual },
+        {
+          id: "group",
+          label: "Group",
+          hint: data.group.name,
+          panel: (
+            <GroupAnalytics group={data.group} now={data.now} timeZone={timeZone} />
+          ),
+        },
+      ]}
+    />
   );
 }
 
