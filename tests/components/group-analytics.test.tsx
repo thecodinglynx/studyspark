@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   GroupAnalytics,
@@ -229,5 +230,86 @@ describe("GroupAnalytics", () => {
 
       expect(screen.queryByText("Shared subjects")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("GroupAnalytics charts", () => {
+  const chart = (container: HTMLElement, index = 0) => {
+    const el = container.querySelectorAll("[data-chart='bar']")[index];
+    return el ? JSON.parse(el.getAttribute("data-json")!) : null;
+  };
+
+  const busy = group({
+    sessions: [
+      session("alice", "2026-11-12", 9, 1),
+      session("alice", "2026-11-11", 9, 1),
+      session("you", "2026-11-12", 5, 5),
+    ],
+  });
+
+  it("charts days studied per member by default, longest bar first", () => {
+    const { container } = show(busy);
+
+    const first = chart(container);
+    expect(first.labels).toEqual(["Alice A", "Yvonne", "bob"]);
+    expect(first.datasets[0].data).toEqual([2, 1, 0]);
+    expect(first.datasets[0].label).toBe("Days studied");
+  });
+
+  it("highlights the viewer's own bar", () => {
+    const { container } = show(busy);
+
+    const colors = chart(container).datasets[0].backgroundColor as string[];
+    expect(colors[1]).not.toBe(colors[0]);
+    expect(colors[0]).toBe(colors[2]);
+  });
+
+  it("switches what is compared", async () => {
+    const user = userEvent.setup();
+    const { container } = show(busy);
+
+    await user.click(screen.getByRole("button", { name: "Accuracy" }));
+    expect(screen.getByRole("button", { name: "Accuracy" })).toHaveAttribute("aria-pressed", "true");
+    const accuracy = chart(container);
+    expect(accuracy.labels).toEqual(["Alice A", "Yvonne", "bob"]);
+    // Alice 90%, Yvonne 50%, and bob has no answers yet.
+    expect(accuracy.datasets[0].data).toEqual([90, 50, null]);
+
+    await user.click(screen.getByRole("button", { name: "Study time" }));
+    expect(chart(container).datasets[0].data).toEqual([20, 10, 0]);
+  });
+
+  it("charts how many members were active each week", () => {
+    const { container } = show(busy);
+
+    const weekly = chart(container, 1);
+    expect(weekly.datasets[0].label).toBe("Members active");
+    expect(weekly.labels).toHaveLength(12);
+    // Alice and Yvonne both studied this week.
+    expect(weekly.datasets[0].data.at(-1)).toBe(2);
+  });
+
+  it("keeps the table available behind a toggle", () => {
+    show(busy);
+
+    expect(screen.getByText("Show everything as a table")).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Study activity of each member of Karate club" })
+    ).toBeInTheDocument();
+  });
+
+  it("charts each shared subject with the viewer highlighted", () => {
+    const { container } = show(
+      group({
+        sharedSubjects: [{ id: "s1", title: "Katas", type: "FLASHCARDS" }],
+        sessions: [session("alice", "2026-11-12", 9, 1), session("you", "2026-11-12", 5, 5)],
+      })
+    );
+
+    // Chart 0 compares members, 1 is the weekly activity, 2 is this subject.
+    const subject = chart(container, 2);
+    expect(subject.datasets[0].label).toBe("Accuracy");
+    expect(subject.labels.slice(0, 2)).toEqual(["Alice A", "Yvonne"]);
+    expect(subject.datasets[0].data.slice(0, 2)).toEqual([90, 50]);
   });
 });

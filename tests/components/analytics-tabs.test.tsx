@@ -93,3 +93,30 @@ describe("analytics tabs", () => {
     expect(tab("Group")).toHaveAttribute("aria-selected", "true");
   });
 });
+
+describe("analytics tabs and charts", () => {
+  it("mounts a panel's charts afresh when its tab opens, so they are drawn at full size", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <AnalyticsDashboard
+        data={{
+          ...base,
+          group: {
+            ...group,
+            sessions: [
+              { userId: "you", subjectId: "s1", at: "2026-11-11T12:00:00.000Z", correct: 3, incorrect: 1, durationMin: 5 },
+            ],
+          },
+        }}
+      />
+    );
+    const groupChart = () => container.querySelector("#analytics-panel-group [data-chart='bar']");
+    const before = groupChart();
+    expect(before).not.toBeNull();
+
+    await user.click(tab("Group"));
+
+    expect(groupChart()).not.toBeNull();
+    expect(groupChart()).not.toBe(before);
+  });
+});

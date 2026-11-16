@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { AnalyticsTabs } from "@/components/analytics/analytics-tabs";
 import { AccuracyLineChart } from "@/components/analytics/charts/accuracy-line-chart";
+import { ActivityHeatmap } from "@/components/analytics/charts/activity-heatmap";
 import { PracticeBarChart } from "@/components/analytics/charts/practice-bar-chart";
+import { RankBarChart } from "@/components/analytics/charts/rank-bar-chart";
 import {
   GroupAnalytics,
   type GroupAnalyticsData,
@@ -15,6 +17,8 @@ import {
   MASTERED_MIN_ATTEMPTS,
   NEGLECTED_AFTER_DAYS,
   activeDays,
+  activityCalendar,
+  dailyActivity,
   byNeedForAttention,
   cardsToReview,
   dayKey,
@@ -22,10 +26,12 @@ import {
   describeDaysAgo,
   formatMinutes,
   lastWeekStarts,
+  minutesBySubject,
   overview,
   subjectProgress,
   weekLabel,
   weeklyAccuracy,
+  weeklyMinutes,
   weeklyActiveDays,
   type CardStat,
   type PracticePoint,
@@ -46,6 +52,9 @@ export interface AnalyticsData {
 }
 
 const WEEKS = 12;
+
+/** How many weeks the activity calendar covers. */
+const HEATMAP_WEEKS = 20;
 
 const subscribeNever = () => () => {};
 
@@ -113,6 +122,18 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       today,
       summary,
       progress,
+      calendar: activityCalendar(
+        dailyActivity(data.sessions, data.practices, timeZone),
+        today,
+        HEATMAP_WEEKS
+      ),
+      minutesPerWeek: weeklyMinutes(data.sessions, weeks, timeZone),
+      timePerSubject: minutesBySubject(
+        data.subjects,
+        data.sessions,
+        data.now,
+        timeZone
+      ),
       weekLabels: weeks.map(weekLabel),
       daysPerWeek: weeklyActiveDays(days, weeks),
       accuracyLines,
@@ -177,6 +198,19 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       )}
 
       {summary.hasAnyActivity && (
+        <Panel className="bg-slate-900/70 p-6">
+          <h2 className="text-lg font-semibold text-white">Activity</h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Every day for the last {HEATMAP_WEEKS} weeks. Darker means you did
+            more that day. Gaps show where the habit slipped.
+          </p>
+          <div className="mt-6">
+            <ActivityHeatmap weeks={view.calendar} />
+          </div>
+        </Panel>
+      )}
+
+      {summary.hasAnyActivity && (
         <div className="grid gap-8 lg:grid-cols-2">
           <Panel className="bg-slate-900/70 p-6">
             <h2 className="text-lg font-semibold text-white">
@@ -210,6 +244,40 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               <PracticeBarChart
                 labels={view.weekLabels}
                 datasets={[{ label: "Days studied", data: view.daysPerWeek }]}
+              />
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {view.timePerSubject.length > 0 && (
+        <div className="grid gap-8 lg:grid-cols-2">
+          <Panel className="bg-slate-900/70 p-6">
+            <h2 className="text-lg font-semibold text-white">Study time</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Minutes of flashcard study each week.
+            </p>
+            <div className="mt-6">
+              <PracticeBarChart
+                labels={view.weekLabels}
+                datasets={[{ label: "Minutes", data: view.minutesPerWeek }]}
+              />
+            </div>
+          </Panel>
+
+          <Panel className="bg-slate-900/70 p-6">
+            <h2 className="text-lg font-semibold text-white">
+              Where your time goes
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Flashcard study time per subject over the last 30 days.
+            </p>
+            <div className="mt-6">
+              <RankBarChart
+                measure="Study time"
+                labels={view.timePerSubject.map((entry) => entry.title)}
+                values={view.timePerSubject.map((entry) => entry.minutes)}
+                format={(value) => formatMinutes(value)}
               />
             </div>
           </Panel>

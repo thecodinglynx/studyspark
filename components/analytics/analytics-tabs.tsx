@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 export interface AnalyticsTab {
   id: string;
@@ -15,7 +15,8 @@ const panelId = (id: string) => `analytics-panel-${id}`;
 
 /**
  * Tabs for the analytics page. Every panel stays in the page and the others
- * are only hidden, so switching is instant and charts keep their data.
+ * are only hidden. A panel's contents are mounted again each time its tab is
+ * opened: a chart drawn while its panel was hidden has no size and stays blank.
  */
 export function AnalyticsTabs({
   tabs,
@@ -90,7 +91,9 @@ export function AnalyticsTabs({
           aria-labelledby={tabId(tab.id)}
           hidden={tab.id !== active}
         >
-          {tab.panel}
+          <Fragment key={tab.id === active ? "open" : "closed"}>
+            {tab.panel}
+          </Fragment>
         </div>
       ))}
     </div>

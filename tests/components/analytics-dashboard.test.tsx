@@ -407,3 +407,39 @@ describe("AnalyticsDashboard", () => {
     });
   });
 });
+
+describe("AnalyticsDashboard visuals", () => {
+  const withActivity = data({
+    subjects: [chem],
+    sessions: [session("2026-11-12", 8, 2), session("2026-11-10", 5, 5)],
+  });
+
+  it("shows an activity calendar covering the last 20 weeks", () => {
+    const { container } = render(<AnalyticsDashboard data={withActivity} />);
+
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    const days = container.querySelectorAll("li[data-level]");
+    expect(days.length).toBeGreaterThanOrEqual(19 * 7 + 1);
+    expect(container.querySelectorAll("li[data-level='1']").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText("1 activity on Thu, Nov 12")).toBeInTheDocument();
+  });
+
+  it("charts study time per week and per subject", () => {
+    const { container } = render(<AnalyticsDashboard data={withActivity} />);
+
+    expect(screen.getByRole("heading", { name: "Study time" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Where your time goes" })).toBeInTheDocument();
+    const bars = Array.from(container.querySelectorAll("[data-chart='bar']")).map((el) =>
+      JSON.parse(el.getAttribute("data-json")!)
+    );
+    const perSubject = bars.find((bar) => bar.labels[0] === "Chemistry");
+    expect(perSubject.datasets[0].data).toEqual([20]);
+  });
+
+  it("shows none of it before there is any activity", () => {
+    render(<AnalyticsDashboard data={data({ subjects: [chem] })} />);
+
+    expect(screen.queryByRole("heading", { name: "Activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Where your time goes" })).not.toBeInTheDocument();
+  });
+});

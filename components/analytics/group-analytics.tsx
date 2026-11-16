@@ -1,10 +1,23 @@
+"use client";
+
+import { useState } from "react";
+import { PracticeBarChart } from "@/components/analytics/charts/practice-bar-chart";
+import { RankBarChart } from "@/components/analytics/charts/rank-bar-chart";
 import { Panel } from "@/components/ui/panel";
-import { dayKey, daysBetween, describeDaysAgo, formatMinutes } from "@/lib/analytics";
+import {
+  dayKey,
+  daysBetween,
+  describeDaysAgo,
+  formatMinutes,
+  lastWeekStarts,
+  weekLabel,
+} from "@/lib/analytics";
 import {
   groupSummary,
   memberLabel,
   memberStats,
   subjectComparisons,
+  weeklyActiveMembers,
   type GroupMember,
   type MemberPractice,
   type MemberSession,
@@ -24,6 +37,22 @@ const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
 const percent = (value: number | null) => (value === null ? "—" : `${value}%`);
+
+/** How many weeks the group activity chart covers. */
+const WEEKS = 12;
+
+type Metric = "days" | "time" | "accuracy";
+
+const METRICS: Array<{ id: Metric; label: string; measure: string }> = [
+  { id: "days", label: "Days studied", measure: "Days studied" },
+  { id: "time", label: "Study time", measure: "Study time" },
+  { id: "accuracy", label: "Accuracy", measure: "Accuracy" },
+];
+
+/** Biggest first; people with nothing to show yet (null) go last. */
+function byValueDesc<T>(rows: T[], value: (row: T) => number | null): T[] {
+  return [...rows].sort((a, b) => (value(b) ?? -1) - (value(a) ?? -1));
+}
 
 /**
  * How the group is doing and how the viewer compares with the others in it.
@@ -49,6 +78,22 @@ export function GroupAnalytics({
     timeZone
   );
   const today = dayKey(now, timeZone);
+  const [metric, setMetric] = useState<Metric>("days");
+  const weeks = lastWeekStarts(today, WEEKS);
+  const activeMembers = weeklyActiveMembers(
+    group.members,
+    group.sessions,
+    group.practices,
+    weeks,
+    timeZone
+  );
+  const metricValue = (row: (typeof stats)[number]) =>
+    metric === "days"
+      ? row.daysStudiedLast30
+      : metric === "time"
+        ? row.minutesLast30
+        : row.accuracyLast30;
+  const ranked = byValueDesc(stats, metricValue);
   const quiet = summary.sessionsLast30 === 0 && stats.every((s) => s.daysStudiedLast30 === 0);
 
   return (
@@ -111,9 +156,50 @@ export function GroupAnalytics({
         <Panel className="bg-slate-900/70 p-6">
           <h3 className="text-lg font-semibold text-white">How you compare</h3>
           <p className="mt-2 text-sm text-slate-400">
-            Members, most days studied in the last 30 days first.
+            The last 30 days. Your bar is highlighted.
           </p>
-          <div className="mt-5 overflow-x-auto">
+          <div
+            role="group"
+            aria-label="Compare members by"
+            className="mt-4 flex flex-wrap gap-2"
+          >
+            {METRICS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={metric === option.id}
+                onClick={() => setMetric(option.id)}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                  metric === option.id
+                    ? "bg-blue-500 text-white"
+                    : "bg-white/5 text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6">
+            <RankBarChart
+              measure={METRICS.find((option) => option.id === metric)!.measure}
+              labels={ranked.map((row) => memberLabel(row.member))}
+              values={ranked.map(metricValue)}
+              highlight={ranked.findIndex((row) => row.member.isYou)}
+              format={
+                metric === "time"
+                  ? (value) => formatMinutes(value)
+                  : metric === "accuracy"
+                    ? (value) => `${value}%`
+                    : undefined
+              }
+              max={metric === "accuracy" ? 100 : undefined}
+            />
+          </div>
+          <details className="group mt-6">
+            <summary className="cursor-pointer text-sm font-medium text-blue-300 hover:text-blue-200">
+              Show everything as a table
+            </summary>
+            <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[34rem] text-left text-sm">
               <caption className="sr-only">
                 Study activity of each member of {group.name}
@@ -163,6 +249,23 @@ export function GroupAnalytics({
                 ))}
               </tbody>
             </table>
+            </div>
+          </details>
+        </Panel>
+      )}
+
+      {!quiet && (
+        <Panel className="bg-slate-900/70 p-6">
+          <h3 className="text-lg font-semibold text-white">Group activity</h3>
+          <p className="mt-2 text-sm text-slate-400">
+            How many members studied or practiced each week, out of{" "}
+            {group.members.length}.
+          </p>
+          <div className="mt-6">
+            <PracticeBarChart
+              labels={weeks.map(weekLabel)}
+              datasets={[{ label: "Members active", data: activeMembers }]}
+            />
           </div>
         </Panel>
       )}
@@ -182,6 +285,13 @@ export function GroupAnalytics({
                 <h4 className="text-base font-semibold text-white">
                   {subject.title}
                 </h4>
+                <div className="mt-4">
+                  <SubjectChart subject={subject} />
+                </div>
+                <details className="group mt-3">
+                  <summary className="cursor-pointer text-sm font-medium text-blue-300 hover:text-blue-200">
+                    Show as a table
+                  </summary>
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full min-w-[24rem] text-left text-sm">
                     <caption className="sr-only">
@@ -235,6 +345,7 @@ export function GroupAnalytics({
                     </tbody>
                   </table>
                 </div>
+                </details>
               </div>
             ))}
           </div>
@@ -251,5 +362,27 @@ function Tile({ label, value, note }: { label: string; value: string; note: stri
       <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
       <p className="mt-1 text-sm text-slate-400">{note}</p>
     </Panel>
+  );
+}
+
+function SubjectChart({
+  subject,
+}: {
+  subject: ReturnType<typeof subjectComparisons>[number];
+}) {
+  const flashcards = subject.type === "FLASHCARDS";
+  const value = (row: (typeof subject.rows)[number]) =>
+    flashcards ? row.accuracy : row.practices;
+  const rows = byValueDesc(subject.rows, value);
+
+  return (
+    <RankBarChart
+      measure={flashcards ? "Accuracy" : "Practices"}
+      labels={rows.map((row) => memberLabel(row.member))}
+      values={rows.map(value)}
+      highlight={rows.findIndex((row) => row.member.isYou)}
+      format={flashcards ? (count) => `${count}%` : undefined}
+      max={flashcards ? 100 : undefined}
+    />
   );
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   accuracyTrend,
   activeDays,
+  activityCalendar,
   addDays,
   byNeedForAttention,
   cardsToReview,
   currentStreak,
+  dailyActivity,
   dayKey,
   daysBetween,
   describeDaysAgo,
@@ -13,12 +15,14 @@ import {
   lastWeekStarts,
   longestStreak,
   masteryOf,
+  minutesBySubject,
   overview,
   subjectProgress,
   weekLabel,
   weekStart,
   weeklyAccuracy,
   weeklyActiveDays,
+  weeklyMinutes,
   type CardStat,
   type PracticePoint,
   type SessionPoint,
@@ -569,5 +573,85 @@ describe("wording", () => {
     expect(formatMinutes(45)).toBe("45 min");
     expect(formatMinutes(60)).toBe("1 h");
     expect(formatMinutes(135)).toBe("2 h 15 min");
+  });
+});
+
+describe("visual helpers", () => {
+  const at = (day: string, durationMin = 10, subjectId = "s1"): SessionPoint => ({
+    subjectId,
+    at: `${day}T15:00:00.000Z`,
+    correct: 1,
+    incorrect: 0,
+    durationMin,
+  });
+  const practice = (day: string): PracticePoint => ({
+    subjectId: "c1",
+    itemId: "i1",
+    at: `${day}T15:00:00.000Z`,
+  });
+
+  it("counts sessions and practices per day in the viewer's timezone", () => {
+    const counts = dailyActivity(
+      [at("2026-11-10"), at("2026-11-10"), { ...at("2026-11-11"), at: "2026-11-12T02:00:00.000Z" }],
+      [practice("2026-11-10")],
+      NY
+    );
+
+    expect(counts.get("2026-11-10")).toBe(3);
+    // 02:00 UTC on the 12th is still the evening of the 11th in New York.
+    expect(counts.get("2026-11-11")).toBe(1);
+    expect(counts.has("2026-11-12")).toBe(false);
+  });
+
+  it("lays out a calendar of Monday-first weeks, oldest first, ending this week", () => {
+    const counts = new Map([
+      ["2026-11-09", 1],
+      ["2026-11-10", 2],
+      ["2026-11-11", 4],
+      ["2026-11-12", 7],
+    ]);
+
+    const calendar = activityCalendar(counts, "2026-11-12", 3);
+
+    expect(calendar).toHaveLength(3);
+    expect(calendar.every((week) => week.length === 7)).toBe(true);
+    expect(calendar[0][0].day).toBe("2026-10-26");
+    const thisWeek = calendar[2];
+    expect(thisWeek[0].day).toBe("2026-11-09"); // Monday
+    expect(thisWeek.map((cell) => cell.level)).toEqual([1, 2, 3, 4, 0, 0, 0]);
+    expect(thisWeek.map((cell) => cell.future)).toEqual([false, false, false, false, true, true, true]);
+    expect(thisWeek[4].count).toBe(0);
+  });
+
+  it("totals study minutes per week, leaving other weeks at zero", () => {
+    const weeks = lastWeekStarts("2026-11-12", 3);
+
+    expect(
+      weeklyMinutes([at("2026-11-10", 15), at("2026-11-11", 5), at("2026-11-02", 30)], weeks, UTC)
+    ).toEqual([0, 30, 20]);
+  });
+
+  it("totals the last 30 days of study time per subject, most first, skipping empty ones", () => {
+    const subjects: SubjectInfo[] = [
+      { id: "s1", title: "Chemistry", type: "FLASHCARDS", cardCount: 3, items: [] },
+      { id: "s2", title: "Biology", type: "FLASHCARDS", cardCount: 3, items: [] },
+      { id: "s3", title: "Physics", type: "FLASHCARDS", cardCount: 3, items: [] },
+    ];
+
+    const result = minutesBySubject(
+      subjects,
+      [
+        at("2026-11-10", 10, "s1"),
+        at("2026-11-11", 25, "s2"),
+        at("2026-10-01", 99, "s1"), // too long ago
+      ],
+      "2026-11-12T17:00:00.000Z",
+      UTC
+    );
+
+    expect(result).toEqual([
+      { subjectId: "s2", title: "Biology", minutes: 25 },
+      { subjectId: "s1", title: "Chemistry", minutes: 10 },
+    ]);
   });
 });

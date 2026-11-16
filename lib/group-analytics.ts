@@ -207,3 +207,22 @@ export function subjectComparisons(
 export function memberLabel(member: GroupMember): string {
   return member.name?.trim() || member.username;
 }
+
+/** How many different members studied or practiced in each of the given weeks. */
+export function weeklyActiveMembers(
+  members: GroupMember[],
+  sessions: MemberSession[],
+  practices: MemberPractice[],
+  weeks: string[],
+  timeZone: string
+): number[] {
+  return weeks.map((start) => {
+    const end = addDays(start, 6);
+    const active = new Set<string>();
+    for (const point of [...sessions, ...practices]) {
+      const day = dayKey(point.at, timeZone);
+      if (day >= start && day <= end) active.add(point.userId);
+    }
+    return members.filter((member) => active.has(member.id)).length;
+  });
+}

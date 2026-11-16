@@ -516,3 +516,101 @@ export function formatMinutes(minutes: number): string {
   const rest = minutes % 60;
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
+
+// ------------------------------------------------------------- visuals
+
+/** How many things were done on each day: flashcard sessions and checklist practices. */
+export function dailyActivity(
+  sessions: SessionPoint[],
+  practices: PracticePoint[],
+  timeZone: string
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const point of [...sessions, ...practices]) {
+    const day = dayKey(point.at, timeZone);
+    counts.set(day, (counts.get(day) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export interface HeatmapDay {
+  day: string;
+  count: number;
+  /** 0 for nothing, up to 4 for a busy day. */
+  level: 0 | 1 | 2 | 3 | 4;
+  /** Days after today in the current week, drawn empty. */
+  future: boolean;
+}
+
+function activityLevel(count: number): HeatmapDay["level"] {
+  if (count <= 0) return 0;
+  if (count === 1) return 1;
+  if (count === 2) return 2;
+  if (count <= 4) return 3;
+  return 4;
+}
+
+/**
+ * A calendar of the last `weeks` weeks, one column per week (Monday first),
+ * oldest week first, for an activity heatmap.
+ */
+export function activityCalendar(
+  counts: Map<string, number>,
+  today: string,
+  weeks: number
+): HeatmapDay[][] {
+  return lastWeekStarts(today, weeks).map((start) =>
+    Array.from({ length: 7 }, (_, offset) => {
+      const day = addDays(start, offset);
+      const future = day > today;
+      const count = future ? 0 : (counts.get(day) ?? 0);
+      return { day, count, level: activityLevel(count), future };
+    })
+  );
+}
+
+/** Minutes of flashcard study in each of the given weeks. */
+export function weeklyMinutes(
+  sessions: SessionPoint[],
+  weeks: string[],
+  timeZone: string
+): number[] {
+  return weeks.map((start) => {
+    const end = addDays(start, 6);
+    return sessions.reduce((sum, session) => {
+      const day = dayKey(session.at, timeZone);
+      return day >= start && day <= end ? sum + session.durationMin : sum;
+    }, 0);
+  });
+}
+
+export interface SubjectTime {
+  subjectId: string;
+  title: string;
+  minutes: number;
+}
+
+/** Minutes of flashcard study per subject over the last 30 days, most first. */
+export function minutesBySubject(
+  subjects: SubjectInfo[],
+  sessions: SessionPoint[],
+  now: string,
+  timeZone: string
+): SubjectTime[] {
+  const today = dayKey(now, timeZone);
+  const start = addDays(today, -29);
+  return subjects
+    .map((subject) => ({
+      subjectId: subject.id,
+      title: subject.title,
+      minutes: sessions
+        .filter((session) => session.subjectId === subject.id)
+        .filter((session) => {
+          const day = dayKey(session.at, timeZone);
+          return day >= start && day <= today;
+        })
+        .reduce((sum, session) => sum + session.durationMin, 0),
+    }))
+    .filter((entry) => entry.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes || a.title.localeCompare(b.title));
+}

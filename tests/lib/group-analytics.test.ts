@@ -4,6 +4,7 @@ import {
   memberLabel,
   memberStats,
   subjectComparisons,
+  weeklyActiveMembers,
   type GroupMember,
   type MemberPractice,
   type MemberSession,
@@ -292,5 +293,32 @@ describe("memberLabel", () => {
     expect(memberLabel(alice)).toBe("Alice A");
     expect(memberLabel(bob)).toBe("bob");
     expect(memberLabel({ ...bob, name: "   " })).toBe("bob");
+  });
+});
+
+describe("weeklyActiveMembers", () => {
+  it("counts each member once per week, however often they studied", () => {
+    const weeks = ["2026-11-02", "2026-11-09"];
+
+    const result = weeklyActiveMembers(
+      members,
+      [
+        session("you", "2026-11-10", 1, 0),
+        session("you", "2026-11-11", 1, 0),
+        session("alice", "2026-11-03", 1, 0),
+        session("alice", "2026-11-10", 1, 0),
+      ],
+      [{ userId: "bob", subjectId: "c1", itemId: "i", at: "2026-11-04T15:00:00.000Z" }],
+      weeks,
+      UTC
+    );
+
+    expect(result).toEqual([2, 2]);
+  });
+
+  it("ignores people who are not members and weeks with nobody", () => {
+    expect(
+      weeklyActiveMembers([you], [session("stranger", "2026-11-10", 1, 0)], [], ["2026-11-09"], UTC)
+    ).toEqual([0]);
   });
 });
